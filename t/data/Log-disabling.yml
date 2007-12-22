@@ -1,0 +1,11 @@
+---
+'Activator::Registry':
+  'Activator::Log':
+    TRACE:
+      FORCE_EXPLICIT: 1
+    DEBUG:
+      FORCE_EXPLICIT: 1
+      main: 1
+      Test: 1
+      'Test::Nested': 1
+

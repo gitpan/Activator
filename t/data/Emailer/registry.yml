@@ -1,0 +1,11 @@
+'Activator::Registry':
+  'Activator::Emailer':
+    mailer_type: Gmail
+define these to test:
+    mailer_args:
+      username: 
+      password: 
+    From: 
+    html_header: 'html_header.tt'
+    html_footer: 'html_footer.tt'
+    email_wrap:  'email_wrap.tt'

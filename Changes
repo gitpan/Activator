@@ -1,0 +1,6 @@
+Revision history for Perl extension Activator.
+
+0.01  Tue Nov 27 18:17:22 2007
+	- original version; created by h2xs 1.23 with options
+		-AXc -n Activator
+
