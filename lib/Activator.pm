@@ -1,6 +1,6 @@
 package Activator;
 
-our $version = '.20';
+our $version = '.90';
 
 1;
 
