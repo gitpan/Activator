@@ -1,6 +1,6 @@
 package Activator;
 
-our $version = '.10';
+our $version = '.20';
 
 1;
 
@@ -9,429 +9,175 @@ __END__
 =head1 NAME
 
 Activator Development Framework - Object Oriented framework to ease
-creation of mulit-developer distributed mixed environment perl based
-software projects, especially Catalyst based websites.
+creation and rapid development of multi-developer distributed mixed
+environment perl based software projects, especially Catalyst based
+websites.
 
 =head1 DESCRIPTION
 
-NOTE: This set of modules is under heavy change and active
-development. Contact the author before using.
+=head2 Overview
+
+Activator provides modules to support rapid software development throughout the software life-cycle:
+
+=over
+
+=item *
+
+Role-based project configuration supporting development, QA, and production needs
+
+=item *
+
+A globally accessible variable registry for all components within a project including the Catalyst web app, crons and daemons
+
+=item *
+
+Key/Value dictionary lookups provide context sensitive messages to users and/or logs
+
+=item *
+
+Template based email using a role-based delivery mechanism
+
+=item *
+
+Role based logging utilizing Log4Perl
+
+=item *
+
+Global database access definitions allowing generic abstraction of database queries (supports intentionally avoiding an ORM)
+
+=item *
+
+Role and configuration file aware command line options processing
+
+=back
+
 
 =head2 Motivation
 
-=over
-
-=item *
-
-Provide a framework that makes it easy to do OO programming in Perl.
-
-=item *
-
-Create a centralized configuration that plays nice with other projects using the same framework.
-
-=item *
-
-Play extra nice with Catalyst, but provide framework for any Perl project.
-
-=item *
-
-Maintain a strong separation between the 3 parts of an MVC codebase.
-
-=item *
-
-Provide tools so that crons, command line tools, and web site code all play nice together.
-
-=item *
-
-Provide I18N that works across all aspects of a project.
-
-=item *
-
-Provide Database access that works across all aspects of a project.
-  Optionally, force programmers to write SQL.
-
-=item *
-
-Allow multiple developers on the same or distributed machines to play nice together.
-
-=back
-
-=head1 TODO
-
-This section lists known issues and desired functionality.
-
-=head2 Activator (this file)
-
-=over
-
-
-=item *
-
-Create full project documentation
-
-=item *
-
-Create Cookbook section
-
-=back
-
-=head2 Activator::Registry
+We are users of Catalyst. We love it, but sometimes making all the
+parts of our projects play nice together within our eco-system is
+difficult. As software would travel from inception to development, to
+QA, to production, there were always design issues that would crop up
+making someones' life difficult. Activator eases the pain. If you
+don't use Activator, you have to go through great pains to avoid these
+problems:
 
 =over
 
 =item *
 
-Complete variable replacement implementation. Some variables should come from C<%ENV> (like C<USER>)
+Make sure that all developers don't forget to use the correct database connections
 
 =item *
 
-support get() of deep keys with indirect notation. eg:
-
-     Activator::Registry->get('top->deep->deeper');
+Insure that the systems team has email configured correctly on all development machines.
 
 =item *
 
-Utilize L<Hash::Merge> custom precedence to DEBUG non-existent keys
-when calling C<register_hash()> with C<right> precedence.
+Make sure your code loads config files from the same place, no matter
+if you are in production, QA or dev environment. Make sure this place
+is maintainable, so that emergency issues can easily be resoloved.
 
 =item *
 
-Make currently commented out L<Hash::Merge> custom precedence
-C<SAFE_LEFT_PRECEDENCE> work when mixing/matching types with C<left>
-or C<right> C<register_hash()>
+Code review to insure a strong separation between the 3 parts of an MVC codebase.
+
+=item *
+
+Come up with yet another standard so that crons, command line tools, and web site code all play nice together.
+
+=item *
+
+Come up with yet another mechanism for providing I18N that works across all aspects of a project.
+
+=item *
+
+Make sure you edit all the configurations necessary when creating a new dev environment
 
 =back
 
-=head2 Activator::Exception
-
-=over
-
-=item *
-
-Make this thing do dictionary/lexicon lookups, with support in $extra
-as well.
-
-=item *
-
-Make C<full_message>this take 2 args, update all of Activator.
-
-=item *
-
-implement C<as_xml()> and C<as_json()>
-
-=item *
-
-Investigate a way to add the file:line where the exception was thrown
-into the error message.
-
-=back
-
-=head2 Activator::Log
-
-=over
-
-=item *
-
-create tests for setting default log levels via new and config
-
-=back
-
-=head2 Activator::Dictionary
-
-=over
-
-=item *
-
-enforce realm naming conventions listed in RESERVED WORDS FOR REALMS section
-
-=item *
-
-make config of 'db_alias' connections consistent with Act::DB terminology
-
-=item *
-
-Document what lookup returns for DB with multiple cols. Or, consider
-removing this functionality altogether: make it only do
-realm,key,value,lang
-
-=back
-
-=head2 Activator::Options
-
-=over
-
-=item *
-
-support variable replacement from Registry
-
-=item *
-
-Support Conf File Search Path via command line, ENV and Registry.
-Also, when a config file does not exist or is ignored, warn which
-search path it was missing/discovered from.
-
-=item *
-
-Create a C<lint> hash within each realm that has the identical
-heirarchy as the realm itself, except values are where the variable
-was set.
-
-=item *
-
-consider supporting realm specific command line options the same way as ENV
-
-=item *
-
-support extra config files that can be injected via command line,ENV
-and Registry. For example:
-
-    * knassar-apache.yml   # user apache config
-    * dev-apache.yml       # dev realm apache config
-    * project-apache.yml   # project apache config
-    * org-apache.yml       # org apache config
-
-    via command line : --conf_files=apache,foo,bar
-    via env vars     : export ACT_OPT_conf_files=apache,foo,bar
-    via yaml         : conf_files: [ apache, foo, bar ]
-
-=back
-
-=head2 Activator::Options
-
-=over
-
-=item *
-
-implement
-
-=back
-
-=head2 act-sync.pl
-
-=over
-
-=item *
-
-Remove the rebates project implementation, replace with real implementation.
-
-=item *
-
-Utilize L<Activator::Project>, whenever that gets implemented
-
-=back
-
-=head2 Catalyst::Plugin::SecureCookies
-
-=over
-
-=item *
-
-Consider pulling out base64 stuff and utilize an existing lib. Seems a
-little hoaky as implemented.
-
-=back
-
-=head2 Catalyst::Plugin::SecureForms
-
-=over
-
-=item *
-
-implement
-
-=back
-
-=head2 Catalyst::Plugin::Activator::Dictionary
-
-=over
-
-=item *
-
-=back
-
-=head2 Catalyst::Plugin::YUI
-
-=over
-
-=item *
-
-Consider implementing some magic to make YUI integration trivail.
-Should import the YUI (js/css/etc) on the fly with some simple syntax
-in a template.
-
-=back
-
-=head2 Catalyst::Plugin::Activator::Ajax
-
-=over
-
-=item *
-
-should provide XML or JSON response wrapper. NOTE: this needs
-research, as there probably is an easy way to do this already.
-
-=item *
-
-Do not return HTML, or if you have to, place in CDATA
-
-=item *
-
-allow passing a .tt to xml_response
-
-=item *
-
-build json_response?
-
-=back
-
-=head2 Activator::DB
-
-=over
-
-=item *
-
-support some sort of SIGHUP to reload the config on the fly
-
-=item *
-
-Add support for other DBs. specifically, support mysql_auto_reconnect via a config option.
-
-=item *
-
-support debugging of C<attr> hash in C<_get_sql()>
-
-=back
-
-=head2 Activator::DB::SQLFactory
-
-=over
-
-=item *
-
-Implement a query builder
-
-=item *
-
-have it use L<Activator::Pager>
-
-=back
-
-=head2 Activator::Memcache
-
-=over
-
-=item *
-
-Implement a simple wrapper to memcached that utilizes the registry.
-Should be a singleton with static calls.
-
-=back
-
-=head2 Activator::Cron
-
-=over
-
-=item *
-
-implement
-
-=back
-
-=head2 Activator::WWW::Util
-
-=over
-
-=item *
-
-Research existing modules on CPAN, implement non-existing stuff.
-
-=back
-
-=head2 Catalyst::Plugin::Activator::Exception
-
-=over
-
-=item *
-
-support C<as_json> and C<as_xml> when L<Activator::Exception> does.
-
-=item *
-
-consider renaming C<throw> to C<toss> or something. Throw dies
-everywhere else but here.
-
-=back
-
-=head2 Catalyst::Plugin::Activator::WWW::Util
-
-=over
-
-=item *
-
-wrapper for the above
-
-=back
-
-=head2 Activator::WWW::AdminTool
-
-=over
-
-=item *
-
-port the RJ admintool into Activator::WWW::AdminTool
-
-=back
-
-=head2 Activator::Test
-
-=over
-
-=item *
-
-create test wrapper that is Registry configurable
-
-=back
-
-=head2 Activator::Test::WWW::Selenium
-
-=over
-
-=item *
-
-fix up to be Activator ready
-
-=back
-
-=head2 Activator::Test::Harness::Selenium
-
-=over
-
-=item *
-
-fix up to be Activator ready
-
-=back
-
-=head2 Activator::Pager
-
-=over
-
-=item *
-
-implement getter functions to be more OO, instead of direct obj access
-
-=back
-
-=head2 Activator::Lexicon
-
-=over
-
-=item *
-
-implement subclass to L<Locale::Maketext> that respects the
-L<Activator::Dictionary> interface
-
-=back
+Activator solves all of the above, and many more problems. Read the L<Activator::Tutorial> to find out how.
+
+=head1 DEPENDANCIES
+
+
+     Data::Dumper
+     Scalar::Util
+     IO::Capture
+     Exception::Class
+     Test::Exception
+     Test::Pod
+     Class::StrongSingleton
+     Hash::Merge
+     Time::HiRes
+     Exception::Class::TryCatch
+     Exception::Class::DBI
+     Crypt::CBC
+     Crypt::Blowfish
+     MIME::Lite
+     HTML::Entities
+     Email::Send
+     Template::Plugin::HTML::Strip
+
+On a CentOS system, this should get you going with Catalyst:
+
+yum install perl-Catalyst-Runtime \
+            perl-Class-Accessor \
+            perl-Class-Data-Inheritable \
+            perl-YAML \
+            perl-Catalyst-Plugin-ConfigLoader \
+
+#     Test::WWW::Mechanize::Catalyst \
+#     Catalyst::View::TT \
+#     Template::Timer \
+#     HTTP::Request::AsCGI \
+#     Catalyst::Plugin::Static::Simple \
+#     Catalyst::Engine::Apache \
+#     Catalyst::Action::RenderView \
+#     HTML::Lint \
+#     Catalyst::Plugin::Authentication::User::Hash \
+#     WWW::Mechanize \
+#     Catalyst::Plugin::Static::Simple \
+#     Catalyst::Plugin::Authentication \
+#     Catalyst::Plugin::Authentication::Store::DBIC \
+#     Catalyst::Plugin::Authentication::Credential::Password \
+#     Catalyst::Plugin::Authorization::Roles \
+#     Catalyst::Plugin::Session \
+#     Catalyst::Plugin::Session::Store::Memcached \
+#     Catalyst::Plugin::Session::State::Cookie \
+#     Catalyst::Plugin::Cache::Memcached \
+
+
+
+#yum install \
+     perl-Data-Dumper \
+     perl-Scalar-Util \
+     perl-IO-Capture \
+     perl-Exception-Class \
+     perl-Test-Exception \
+     perl-Test-Pod \
+     perl-Hash-Merge \
+     perl-Time-HiRes \
+     perl-Exception-Class-DBI \
+     perl-Crypt-CBC \
+     perl-Crypt-Blowfish \
+     perl-MIME-Lite \
+     perl-HTML-Entities \
+     perl-Template-Plugin-HTML-Strip \
+
+
+     python-crypto python-paramiko memcached
+
+
+cd /root/downloads/activator-rpms && rpm -Hiv \
+     perl-Class-StrongSingleton-0.02-1.noarch.rpm \
+     perl-Data-Validate-IP-0.08-1.noarch.rpm \
+     perl-Data-Validate-URI-0.04-1.noarch.rpm \
+     perl-Exception-Class-TryCatch-1.10-1.noarch.rpm
+
+=head1 FUTURE WORK
+
+Please see the project blueprints (AKA: todo list) on launchpad: https://blueprints.launchpad.net/activator-framework
 
 =head1 SEE ALSO
 
@@ -442,14 +188,15 @@ L<Activator::Dictionary> interface
  L<Activator::Pager>
  L<Activator::Dictionary>
  L<Activator::Options>
+ L<Activator::Tutorial>
 
 =head1 AUTHOR
 
-Karim Nassar
+Karim A. Nassar
 
 =head1 COPYRIGHT
 
-Copyright (c) 2007 Karim Nassar <karim.nassar@acm.org>
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, as specified in the Perl README file.

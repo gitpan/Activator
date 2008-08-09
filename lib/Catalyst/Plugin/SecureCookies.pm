@@ -423,10 +423,6 @@ sub _urlencode_string {
 
 =back
 
-=head1 BUGS
-
-Please report bugs to Rob Johnson L<rob@giant-rock.com>
-
 =head1 SEE ALSO
 
 L<Catalyst>, L<Digest::SHA1>, L<Crypt::CBC>, L<MIME::Base64>
@@ -439,13 +435,16 @@ Rob Johnson L<rob@giant-rock.com>
 
 =head1 ACKNOWLEDGEMENTS
 
- * Karim Nassar for converting this into a self-contained Catalyst Plugin.
+ * Karim A. Nassar for converting this into a self-contained Catalyst Plugin.
 
  * All the helpful people in #catalyst.
 
-=head1 COPYRIGHT & LICENSE
+=head1 COPYRIGHT
 
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
+You may distribute under the terms of either the GNU General Public
+License or the Artistic License, as specified in the Perl README file.
 
 =cut
 

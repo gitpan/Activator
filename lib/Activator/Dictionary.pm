@@ -442,7 +442,13 @@ sub new {
 sub _init_config {
     my ($self) = @_;
 
+    # old config format
     my $config = Activator::Registry->get('Activator::Dictionary');
+    if ( !$config ) {
+	# new format
+	$config = Activator::Registry->get('Activator->Dictionary');
+    }
+
 
     $self->{config}->{default_realm} = $config->{default_realm} || 'default';
     $self->{config}->{default_lang}  = $config->{default_lang} || 'en';
@@ -567,11 +573,11 @@ L<Exception::Class::TryCatch>, L<Class::StrongSingleton>
 
 =head1 AUTHOR
 
-Karim Nassar
+Karim A. Nassar
 
 =head1 COPYRIGHT
 
-Copyright (c) 2007 Karim Nassar <karim.nassar@acm.org>
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, as specified in the Perl README file.

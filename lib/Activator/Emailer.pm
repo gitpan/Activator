@@ -9,18 +9,58 @@ use Exception::Class::TryCatch;
 use Data::Dumper;
 use Hash::Merge;
 use Activator::Log qw( :levels );
+
 =head1 NAME
 
-Activator::Emailer
+Activator::Emailer - Send emails from anywhere within a project in the same way using role-based configuration.
 
 =head1 SYNOPSIS
 
+Configure defaults with Activator::Registry configuration (See
+L<CONFIGURATION>), then:
+
   use Activator::Emailer;
-  my $tt_vars = { pkg => 'Activator::Emailer' };
+  my $tt_vars = { data => 'any data your template needs',
+                  other_data => $my_data,
+                };
+  my $mailer = Activator::Emailer->new(
+     To          => 'person@test.com',
+     Cc          => 'other@test.com, other2@test.com'
+     Subject     => 'Test Subject',
+  );
+  $mailer->send( $tt_vars );
+
+Reuse the mailer object to send another mail to someone else using a different
+body template, plus an attachment:
+
+  $mailer->set_cc( '' );
+  $mailer->set_to( 'someone_else@other-domain.com' );
+  $mailer->set_html_body( '/path/to/html_body.tt' );
+  $tt_vars = $my_alternate_data_hashref;
+  $mailer->attach( Type        => 'application/pdf',
+                   Path        => 'path/to/doc.pdf',
+                   Filename    => 'doc.pdf',
+                   Disposition => 'attachment' );
+  $mailer->send( $tt_vars );
+
+=head1 DESCRIPTION
+
+C<Activator::Emailer> is a simple wrapper to L<Mime::Lite>,
+L<Template::Toolkit> and L<Email::Send> that uses your project's
+L<Activator::Registry> to facilitate easy sending of multipart
+text/html email from any module in your project. Emailer can talk to
+any MTAs that L<Email::Send> can.
+
+=head2 Full Example
+
+  use Activator::Emailer;
+  my $tt_vars = { data => $my_data,
+                  other_data => 'any data your template needs'
+                };
   my $mailer = Activator::Emailer->new(
      From        => 'no-reply@test.com',
      To          => 'person@test.com',
-     Cc          => [ qw( other@test.com other2@test.com ) ],
+     Cc          => 'other@test.com, other2@test.com'
      Subject     => 'Test Subject',
      html_header => '/path/to/html_header.tt',
      html_body   => '/path/to/html_body.tt',
@@ -37,88 +77,74 @@ Activator::Emailer
                    Disposition => 'attachment'
   $mailer->send( $tt_vars );
 
-See L<CONFIGURATION> for how to use L<Activator::Registry> to simplify
-the above usage to:
-
-  use Activator::Emailer;
-  my $tt_vars = { pkg => 'Activator::Emailer' };
-  my $mailer = Activator::Emailer->new(
-     To          => 'person@test.com',
-     Cc          => [ qw( other@test.com other2@test.com ) ],
-     Subject     => 'Test Subject',
-     html_body   => '/path/to/html_body.tt',
-  );
-  $mailer->attach( Type        => 'application/pdf',
-                   Path        => 'path/to/doc.pdf',
-                   Filename    => 'invoice.pdf',
-                   Disposition => 'attachment' );
-  $mailer->send( $tt_vars );
-  $mailer->set_html_body( "Hello again. This is <b>[% pkg %]</b>\n" );
-  $tt_vars->{pkg} = 'Other::Package';
-  $mailer->send( $tt_vars );
-
-=head1 DESCRIPTION
-
-C<Activator::Emailer> is a simple wrapper to L<Mime::Lite>,
-L<Template::Toolkit> and L<Email::Send> that uses your project's
-L<Activator::Registry> to facilitate easy sending of multipart
-text/html email from any module in your project.
+The next section shows how to simplify this.
 
 =head1 CONFIGURATION
 
-You can utilize L<Activator::Registry> to simplify creation of emails:
+As is seen in the previous section, a lot of information is needed to
+send an email. Fortunately, most of the information is reusable. You
+can utilize L<Activator::Registry> to simplify creation of emails:
 
   'Activator::Registry':
-    'Activator::Emailer':
+    'Activator::Emailer': 
+      From: noreply@domain.com
       mailer_type: Gmail     # any of the send methods Email::Send supports
       mailer_args:           # any of the args required by your Email::Send::<TYPE>
         - username: <username>
         - password: <password>
-      From: default@domain.com
       html_header: /fully/qualified/path/to/header/tt/template
       html_footer: relative/path/to/footer/tt/template
+      html_body:   relative/path/to/body/tt/template
       email_wrap:  /path/to/email/wrapper/template
       tt_options:
         INCLUDE_PATH: /path/to/tt/templates
+
+In the simplist case, you can now send as such:
+
+  my $mailer = Activator::Emailer->new(
+     To          => 'person@test.com',
+     Subject     => 'Test Subject',
+  );
+  $mailer->send( { data => $my_data } );
 
 
 =head1 TEMPLATES SETUP
 
 You must create 4 template for emails to work. Each template has a
-variable C<Activator_Emailer_format> available so you can do format
+variable C<Activator_Emailer_format> available so you can do HTML or text
 specific template blocks. Note that it is suggested that you utilize
 the TT chomping close tag (C<-%]>) to maintain format.
 
-=head2 html_header
+=head2 File 1: html_header
 
 This is the most basic header, but you can add as much HTML as you
 like, including limited style and script tags:
 
-<html>
-<body>
+ <html>
+ <body>
 
-=head2 html_body
+=head2 File 2: html_body
 
 Put whatever html you like in this section.
 
-<h1>Body</h1>
-<p>This is only an example</p>
-[% IF Activator_Emailer_format == 'text' -%]
-========================================
-[% ELSE -%]
-<hr>
-[% END -%]
+ <h1>Body</h1>
+ <p>This is only an example</p>
+ [% IF Activator_Emailer_format == 'text' -%]
+ ========================================
+ [% ELSE -%]
+ <hr>
+ [% END -%]
 
-=head2 html_footer
+=head2 File 3: html_footer
 
 This is the most basic footer, but you can add as much HTML as you like:
 
-  </body>
-  </html>
+ </body>
+ </html>
 
-=head2 email_wrap
+=head2 File 4: email_wrap.tt
 
-Copy this verbatim:
+Copy this verbatim, trim the leading space:
 
   [% USE HTML.Strip -%]
   [% BLOCK html_header -%]
@@ -140,6 +166,7 @@ Copy this verbatim:
   [% INCLUDE html_footer -%]
   [% END -%]
 
+Note that you can put the files anywhere. See L<CONFIGURATION> for more details.
 
 =head1 METHODS
 
@@ -163,17 +190,17 @@ injected directly into the mail header ( hence the capitalization )
 
 The following are used for sending with L<Email::Send>:
 
- * mailer_type - Any valid Email::Send subclass 
+ * mailer_type - Any valid Email::Send subclass
  * mailer_args - Any args to pass to the <mailer_type> class
 
-=item * 
+=item *
 
 The following are used with L<Template::Toolkit>
 
  * tt_include_path - The INCLUDE_PATH for template toolkit. Useful
                      for reusing project templates within an email
 
-=item * 
+=item *
 
 The following are custom to C<Activator::Emailer>:
 
@@ -185,8 +212,6 @@ The following are custom to C<Activator::Emailer>:
                  of the email Also, this will be stripped of all HTML
                  tags ( using HTML::Strip ) and used for the body of
                  the text portion of the email.
-
-
 
 =back
 
@@ -200,21 +225,17 @@ sub new {
     bless ( $self ), $pkg;
 
     $self->{attachments} = [];
-    $self->{sender} = Email::Send->new( {
-					 mailer      => $self->{mailer_type},
-					 mailer_args => [ %{ $self->{mailer_args} } ],
-					}
-				      );
+    my $args = { mailer => $self->{mailer_type} };
+    if ( keys %{ $self->{mailer_args} } ) {
+	$args->{mailer_args} = [ %{ $self->{mailer_args} } ];
+    }
+    $self->{sender} = Email::Send->new( $args );
     return $self;
 }
 
 =head2 send( $tt_vars )
 
-=over
-
 Send the email using C<$tt_vars> for the L<Template::Toolkit> C<process> method.
-
-=back
 
 =cut
 
@@ -244,15 +265,12 @@ sub send {
     my @email_args = (
 		      From    => $self->{From},
 		      To      => $self->{To},
+		      Cc      => $self->{Cc},
 		      Subject => $self->{Subject},
+		      SkipBad => 1,
 		     );
 
-    if ( @{ $self->{attachments} } ) {
-	push @email_args, ( Type => 'multipart/mixed' );
-    }
-    else {
-	push @email_args, ( Type => 'multipart/alternative' );
-    }
+    push @email_args, ( Type => 'multipart/alternative' );
 
     my $email = MIME::Lite->new( @email_args );
     $email->attach(
@@ -269,13 +287,14 @@ sub send {
 	$email->attach( @$attachment );
     }
 
-    DEBUG("----------------------------------------\nCreated email:\n". 
+    DEBUG("----------------------------------------\nCreated email:\n".
 	  $email->as_string .
 	  "\n----------------------------------------"
 	 );
 
     try eval {
-	$self->{sender}->send( $email->as_string)
+	my $retval = $self->{sender}->send( $email->as_string);
+	die $retval unless $retval;
     };
     if ( catch my $e ) {
 	Activator::Exception::Emailer->throw( 'send_error', $e );
@@ -284,29 +303,53 @@ sub send {
 
 =head2 attach( %args )
 
-=over
-
 Attach an item to this email. When C<send()> is called, C<%args> is
 just passed through to the L<MIME::Lite> attach function.
-
-=back
 
 =cut
 
 sub attach {
     my ( $self, %attachment ) = @_;
-    Activator::Exception::Emailer->throw('attach_not_implemented');
     push @{ $self->{attachments} }, [ %attachment ];
+}
+
+=head2 valid_email ( $email )
+
+Sanity check on the email address. Throws exception on failure.
+
+=cut
+
+sub valid_email {
+    my $addr = shift;   
+
+    #characters allowed on name: 0-9a-Z-._ on host: 0-9a-Z-. on between: @
+    return 0 if ( $addr !~ /^[0-9a-zA-Z\.\-\_]+\@[0-9a-zA-Z\.\-]+$/ ); 
+
+    #must start or end with alpha or num
+    return 0 if ( $addr =~ /^[^0-9a-zA-Z]|[^0-9a-zA-Z]$/); 
+
+    #name must end with alpha or num
+    return 0 if ( $addr !~ /([0-9a-zA-Z]{1})\@./ ); 
+
+    #host must start with alpha or num
+    return 0 if ( $addr !~ /.\@([0-9a-zA-Z]{1})/ ); 
+
+    #pair .- or -. or -- or .. not allowed
+    return 0 if ( $addr =~ /.\.\-.|.\-\..|.\.\..|.\-\-./g ); 
+
+    #pair ._ or -_ or _. or _- or __ not allowed
+    return 0 if ( $addr =~ /.\.\_.|.\-\_.|.\_\..|.\_\-.|.\_\_./g ); 
+
+    #host must end with '.' plus 2, 3 or 4 alpha for TopLevelDomain (MUST be modified in future!)
+    return 0 if ( $addr !~ /\.([a-zA-Z]{2,4})$/ ); 
+
+    return 1;
 }
 
 =head2 setters
 
-=over
-
 Each value that can be passed to C<new()> can be modified by calling
 C<set_E<lt>VALUEE<gt>>, where value is lowercased.
-
-=back
 
 =cut
 
@@ -363,11 +406,11 @@ L<Class::StrongSingleton>
 
 =head1 AUTHOR
 
-Karim Nassar ( karim.nassar@acm.org )
+Karim A. Nassar ( karim.nassar@acm.org )
 
 =head1 License
 
-The Activator::Emailer module is Copyright (c) 2007 Karim Nassar.
+The Activator::Emailer module is Copyright (c) 2007 Karim A. Nassar.
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, or as specified in the Perl README file.

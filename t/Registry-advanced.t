@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-use Test::More tests => 10;
+use Test::More tests => 11;
 use Test::Exception;
 use Activator::Registry;
 use Activator::Log;
@@ -41,7 +41,10 @@ ok( @$list[2] eq $replacements->{VAR3}, 'item3 replaced' );
 ok( @$list[3] eq $replacements->{VAR4}, 'item4 replaced' );
 ok( @$list[4] eq $replacements->{VAR5}, 'item5 replaced' );
 
-# key does not exist
+# multiple keys in the same line get replaced
 my $multi = $reg->get('multi');
-ok( $multi eq 
-    qq($replacements->{VAR1} plus $replacements->{VAR2} equals $replacements->{VAR3}/$replacements->{VAR1}), 'complex replacements work');
+ok( $multi eq 'one plus two equals four - one' , 'complex replacements work');
+
+# recursive key definitions work
+my $recursive = $reg->get('recursive');
+ok( $recursive eq 'one plus two equals four - one equals three' , 'recursive replacements work');

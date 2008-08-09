@@ -1,8 +1,8 @@
-use Activator::Build;
+use Module::Build;
 
-my $build = Activator::Build->new
+my $build = Module::Build->new
     (
-     dist_version => '.10',
+     dist_version => '.20',
      module_name => 'Activator',
      license     => 'perl',
      requires    => {
@@ -13,28 +13,23 @@ my $build = Activator::Build->new
 		     'Exception::Class' => 0,
 		     'Test::Exception' => 0,
 		     'Test::Pod' => 0,
-		     'Test::Harness' => 0,
 		     'Class::StrongSingleton' => 0,
 		     'Hash::Merge' => 0,
 		     'Time::HiRes' => 0,
-		     'Test::WWW::Selenium' => 0,
 		     'Exception::Class::TryCatch' => 0,
 		     'Exception::Class::DBI' => 0,
 		     'Email::Send' => 0,
 		     'MIME::Lite' => 0,
+		     'HTML::Entities' => 0,
 		     'Digest::SHA1' => 0,
 		     'Crypt::CBC' => 0,
 		     'MIME::Base64' => 0,
 		     'CGI::Cookie' => 0,
 		     'YAML::Syck' => 0,
+		     'Template' => 0,
+		     'Template::Plugin::HTML::Strip' => 0,
+
 		    },
 
-     build_requires => {
-			'Activator::Build' => 0,
-		       },
-
-     extra_dirs => {
-		    share => { dest_dir => 'usr/share/activator/' },
-		   },
     );
 $build->create_build_script;

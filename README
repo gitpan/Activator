@@ -1,4 +1,4 @@
-Activator version 0.10
+Activator Framework
 ======================
 
 NOTES
@@ -7,9 +7,6 @@ NOTES
 Activator Development Framework - Object Oriented framework to ease
 creation of mulit-developer distributed mixed environment perl based
 software projects, especially Catalyst based websites.
-
-This set of modules is under heavy change and active development.
-Contact the author before using.
 
 INSTALLATION
 ------------
@@ -21,12 +18,20 @@ To install this module type the following:
    ./Build test
    ./Build install
 
+Testing Notes:
+
+Several modules have very invasive testing. For full testing, see the
+instruction in these modules:
+
+Activator::Emailer
+
+Activator::DB
+
+Activator::Dictionary
+
+
 DEPENDENCIES
 ------------
-
-Build: This module currently requires App::Build for building. This is
-a temporary situation, as plans exist to provide a build mechanism
-without this dependancy within the project itself.
 
 Run: This module requires these other modules and libraries:
 
@@ -41,7 +46,6 @@ Run: This module requires these other modules and libraries:
  Class::StrongSingleton
  Hash::Merge
  Time::HiRes
- Test::WWW::Selenium
  Exception::Class::TryCatch
  Exception::Class::DBI
  Email::Send
@@ -57,7 +61,7 @@ See `perldoc Activator` for more information.
 COPYRIGHT AND LICENCE
 ---------------------
 
-Copyright (c) 2007 Karim Nassar <karim.nassar@acm.org>
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, as specified in the Perl README file.

@@ -14,7 +14,12 @@
     level_1:
       level_2:
         level_3: 'this is level 3'
-
+  deep_hash_with_list:
+    level_1:
+      level_2:
+        - a
+        - b
+       
 
 
 

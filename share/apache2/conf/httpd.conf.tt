@@ -54,13 +54,13 @@ ServerTokens OS
 #
 # Do NOT add a slash at the end of the directory path.
 #
-ServerRoot "[% apache.ServerRoot %]"
+ServerRoot "[% apache2.ServerRoot %]"
 
 #
 # PidFile: The file in which the server should record its process
 # identification number when it starts.
 #
-PidFile [% apache.PidFile %]
+PidFile [% apache2.PidFile %]
 
 #
 # Timeout: The number of seconds before receives and sends time out.
@@ -131,7 +131,7 @@ MaxRequestsPerChild  0
 # prevent Apache from glomming onto all bound IP addresses (0.0.0.0)
 #
 
-Listen 70.84.217.53:[% apache.ListenPort %]
+Listen [% apache2.Listen %]:[% apache2.ListenPort %]
 
 #
 # Dynamic Shared Object (DSO) Support
@@ -227,8 +227,8 @@ Include conf.d/*.conf
 #  when the value of (unsigned)Group is above 60000; 
 #  don't use Group #-1 on these systems!
 #
-User [% apache.User %]
-Group [% apache.Group %]
+User [% apache2.User %]
+Group [% apache2.Group %]
 
 ### Section 2: 'Main' server configuration
 #
@@ -261,7 +261,7 @@ ServerAdmin root@localhost
 # You will have to access it by its address anyway, and this will make 
 # redirections work in a sensible way.
 #
-ServerName [% apache.ServerName %]:[% apache.ListenPort %]
+ServerName [% apache2.ServerName %]:[% apache2.ListenPort %]
 
 #
 # UseCanonicalName: Determines how Apache constructs self-referencing 
@@ -277,7 +277,7 @@ UseCanonicalName Off
 # documents. By default, all requests are taken from this directory, but
 # symbolic links and aliases may be used to point to other locations.
 #
-DocumentRoot "[% apache.DocumentRoot %]"
+DocumentRoot "[% apache2.DocumentRoot %]"
 
 #
 # Each directory to which Apache has access can be configured with respect
@@ -302,7 +302,7 @@ DocumentRoot "[% apache.DocumentRoot %]"
 #
 # This should be changed to whatever you set DocumentRoot to.
 #
-<Directory "[% apache.DocumentRoot %]">
+<Directory "[% apache2.DocumentRoot %]">
 
 #
 # Possible values for the Options directive are "None", "All",

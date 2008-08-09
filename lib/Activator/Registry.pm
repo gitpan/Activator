@@ -28,33 +28,59 @@ Activator::Registry - provide a registry based on YAML file(s)
   #### get value for $key from default realm
   Activator::Registry->get( $key );
 
+  #### get a deep value for $key from default realm
+  #### this form throws exception for invalid keys
+  $key = 'top->deep->deeper';
+  try eval {
+     Activator::Registry->get( $key );
+  }
+
   #### register YAML file into realm
   Activator::Registry->register_file( $file, $realm );
 
   #### register hash into realm
   Activator::Registry->register_hash( $mode, $hashref, $realm );
 
+  #### use ${} syntax in your registry for variables
+  Activator::Registry->replace_in_realm( 'default', $replacements_hashref );
+
 =head1 DESCRIPTION
 
 This module provides global access to a registry of key-value pairs.
 It is implemented as a singleton, so you can use this Object Oriented
-or staticly with arrow notation. It supports setting of deeply nested
-objects. (See L<FUTURE WORK> for plans for deep C<get>ting.)
+or staticly with arrow notation. It supports getting and setting of
+deeply nested objects. Setting can be done via YAML configuration
+files.
 
-=head1 CONFIGURATION
+=head1 CONFIGURATION FILES
 
-This module expects (but does not require) an environment variable
-ACT_REG_YAML_FILE to be set. When set, this file is automatically
-loaded upon the first call to C<new()>.
+Configuration files are YAML files.
+
+=head2 Registry Within Another Configuration File
+
+You can have a registry be a stand alone file, or live within a
+configuration file used for other purposes. If you wish your registry
+to be only a subset of a larger YAML file, put the desired hierarchy
+in a top level key C<Activator::Registry>. If that key exists, only
+that part of the YAML file will be registered.
+
+=head2 Default Configuration File
+
+Often, your project will have a central configuration file that you
+always want to use. In these cases set the environment variable
+C<ACT_REG_YAML_FILE>. All calls to L</new()>, L</load()> and
+L</reload()> will register this file first, then any files passed as
+arguments to those subroutines.
 
 If you are utilizing this module from apache, this directive must be
 in your httpd configuration:
 
   SetEnv ACT_REG_YAML_FILE '/path/to/config.yml'
 
-If you are using this module from a script, you need to insure that
-the environment is properly set using a BEGIN block BEFORE the C<use>
-statement of any module that C<use>s C<Activator::Registry> itself:
+If you are using this module from a script, you need to ensure that
+the environment is properly set. This my require that you utilize a
+BEGIN block BEFORE the C<use> statement of any module that C<use>s
+C<Activator::Registry> itself:
 
   BEGIN{
       $ENV{ACT_REG_YAML_FILE} ||= '/path/to/reg.yml'
@@ -65,26 +91,25 @@ keys are undef...
 
 =head1 METHODS
 
-=head2 new ( $yaml )
+=head2 new()
 
-=over
-
-Create a new registry object. This is a singleton, so repeated calls
-always return the same ref. Optionally takes C<$yaml> as an argument
-and will register that file.
-
-=back
+Returns a reference to a registry object. This is a singleton, so
+repeated calls always return the same ref. This will load the file
+specified by C<$ENV{ACT_REG_YAML_FILE}>, then C<$yaml_file>. If
+neither are valid YAML files, you will have an object with an empty
+registry. If the registry has already been loaded, DOES NOT RELOAD it.
+use L</reload()> for that.
 
 =cut
 
 sub new {
-    my ( $pkg, $yaml ) = @_;
+    my ( $pkg, $yaml_file ) = @_;
 
     my $self = bless( {
           DEFAULT_REALM => 'default',
-          REGISTRY => {},
+	  REGISTRY => { },
 
-# TODO: consider using custom precedence
+# TODO: consider using this custom precedence:
 #          SAFE_LEFT_PRECEDENCE =>
 #           {
 #            'SCALAR' => {
@@ -95,7 +120,7 @@ sub new {
 #            'ARRAY' => {
 #               'SCALAR' => sub { [ @{ $_[0] }, $_[1] ] },
 #               'ARRAY'  => sub { [ @{ $_[0] }, @{ $_[1] } ] },
-#               'HASH'   => &die_hash_array,
+		       #               'HASH'   => &die_hash_array,
 #              },
 #            'HASH' => {
 #               'SCALAR' => &die_scalar_hash,
@@ -107,33 +132,99 @@ sub new {
 		      }, $pkg);
 
     $self->_init_StrongSingleton();
-
-    $yaml ||= $ENV{ACT_REG_YAML_FILE};
-
-    if ( defined( $yaml ) ) {
-	if ( !keys( %{ $self->{REGISTRY} } )
-	     #|| $self->get( 'ACTIVATOR_REGISTRY_FORCE_RELOAD' )
-	   ) {
-	    if ( -f $yaml ) {
-		$self->register_file( $yaml );
-	    } else {
-		WARN( "'$yaml' is not a valid file: registry not loaded");
-		return $self;
-	    }
-	}
+    if ( $yaml_file ) {
+	$self->load( $yaml_file )
+    }
+    else {
+	$self->load();
     }
     return $self;
 }
 
-=head2 register( $key, $value, $realm )
+=head2 load()
 
-=over
+Load a YAML file into the registry. Throws exception if the file has
+already been successfully loaded.
+
+=cut
+
+sub load {
+    my ( $pkg, $yaml_file, $reload ) = @_;
+    my $self = $pkg->new();
+    my $registered_something;
+
+    if( $reload ) {
+	$self->{REGISTRY_BACKUP} = $self->{REGISTRY};
+	$self->{REGISTRY} = { };
+    }
+
+    if ( !keys( %{ $self->{REGISTRY} } ) ) {
+
+	if( defined ( $ENV{ACT_REG_YAML_FILE} ) && -f $ENV{ACT_REG_YAML_FILE} ) {
+	    $self->register_file( $ENV{ACT_REG_YAML_FILE} );
+	    $registered_something = 1;
+	}
+
+	if ( defined( $yaml_file ) && -f $yaml_file ) {
+	    $self->register_file( $yaml_file );
+	    $registered_something = 1;
+	}
+    }
+
+    else {
+	# refuse to reload without flag
+	WARN("Cowardly refusing to stomp registry without 'reload' flag");
+	return;
+    }
+
+    if ( !$registered_something ) {
+
+	my $action = 'load';
+	if ( keys %{ $self->{REGISTRY_BACKUP} } ) {
+	    $self->{REGISTRY} = $self->{REGISTRY_BACKUP};
+	    $action = 'reload';
+	}
+
+	if ( $ENV{ACT_REG_YAML_FILE} || $yaml_file ) {
+	    my $msg = "Registry $action failed." .
+	    'Neither $ENV{ACT_REG_YAML_FILE} ('. ( $ENV{ACT_REG_YAML_FILE} || 'undef' ) .
+	    ') nor $yaml_file ('. ( $yaml_file || 'undef' ) .
+	    ') are a valid configuration file';
+
+	    # TODO: figure out how to solve the cyclic dependancy problem.
+	    # That is, Log depends on this file to find it's config, so
+	    # when calling new, we can't be guranteed that log is loaded.
+	    # We need to figure out if Log is loaded, then we can just
+	    # warn for the outlier case where Log is configured to a bad
+	    # filename.
+	    warn( "[WARN] $msg" );
+	}
+	$registered_something = 0;
+    }
+    else {
+	$registered_something = 1;
+    }
+
+    return $registered_something;
+}
+
+=head2 reload()
+
+Reloads a specific configuration file. This nukes the existing registry.
+
+=cut
+
+sub reload {
+    my ( $pkg, $yaml_file ) = @_;
+    $pkg->load( $yaml_file, 1 );
+}
+
+=head2 register( $key, $value, $realm )
 
 Register a key-value pair to C<$realm>. Registers to the default realm
 if C<$realm> not defined. Returns true on success, false otherwise
-(more specifically, the return value of the C<eq> operator).
-
-=back
+(more specifically, the return value of the C<eq> operator when
+testing the set value to the value passed in).
 
 =cut
 
@@ -141,19 +232,35 @@ sub register {
   my ($pkg, $key, $value, $realm) = @_;
   my $self = $pkg->new();
   $realm ||= $self->{DEFAULT_REALM};
-  $self->{REGISTRY}->{ $realm }->{ $key } = $value;
-  return $self->{REGISTRY}->{ $realm }->{ $key } eq $value;
+
+   my @keys = split( '->', $key );
+   if ( @keys > 1 ) {
+       my $setref = $self->{REGISTRY}->{ $realm };
+       $self->_deep_register( \@keys, $value, $setref );
+       return $self->get( $key ) eq $value;
+   }
+  else {
+      $self->{REGISTRY}->{ $realm }->{ $key } = $value;
+      return $self->{REGISTRY}->{ $realm }->{ $key } eq $value;
+  }
+}
+
+sub _deep_register {
+  my ($self, $keys, $value, $setref) = @_;
+  my $curkey = shift @$keys;
+  if ( @$keys == 0 ) {
+      $setref->{ $curkey } = $value;
+  }
+  else {
+      $self->_deep_register( $keys, $value, $setref->{ $curkey });
+  }
 }
 
 =head2 register_file( $file, $realm)
 
-=over
-
 Register the contents of the C<'Activator::Registry':> heirarchy from
 within a YAML file, then merge it into the existing registry for the
 default realm, or optionally C<$realm>.
-
-=back
 
 =cut
 
@@ -162,20 +269,26 @@ sub register_file {
     my $self = $pkg->new();
     $realm ||= $reg->{DEFAULT_REALM};
     my $config = YAML::Syck::LoadFile( $file );
-    $self->register_hash( 'left', $config->{'Activator::Registry'}, $realm );
+
+    # In pre 1.0 versions of this module, it was a top level key of
+    # 'Activator::Registry' was required to allow registries to live
+    # within other yml files. In common usage, this is not the normal
+    # case. Here we support both.
+    if ( $config->{'Activator::Registry'} ) {
+	$self->register_hash( 'left', $config->{'Activator::Registry'}, $realm );
+    }
+    else {
+	$self->register_hash( 'left', $config, $realm );
+    }
 }
 
 
 =head2 register_hash( $mode, $right, $realm)
 
-=over
-
 Set registry keys in C<$realm> from C<$right> hash using C<$mode>,
 which can either be C<left> or C<right>. C<left> will only set keys
 that do not exist, and C<right> will set or override all C<$right>
 values into C<$realm>'s registry.
-
-=back
 
 =cut
 
@@ -214,12 +327,27 @@ sub register_hash {
 
 =head2 get( $key, $realm )
 
-=over
-
 Get the value for C<$key> within C<$realm>. If C<$realm> not defined
-returns the value from the default realm.
+returns the value from the default realm. C<$key> can refer to a
+deeply nested element. Returns undef if the key does not exist, or you
+try to seek into an array. Some examples:
 
-=back
+With a YAML config that produces:
+
+  deep_list:
+    level_1:
+      - level_2_a
+      - level_2_b
+  key: value
+
+You will get this behavior:
+
+  Activator::Registry->get( 'key' );                           # returns 'value'
+  Activator::Registry->get( 'deep_list' );                     # returns hashref
+  Activator::Registry->get( 'deep_lost' );                     # returns undef
+  Activator::Registry->get( 'deep_list->level_1' );            # returns arrayref
+  Activator::Registry->get( 'deep_list->level_1->level_2_a' ); # returns undef
+  Activator::Registry->get( 'deep_list->level_one' );          # returns undef
 
 =cut
 
@@ -228,16 +356,45 @@ sub get {
 
    my $self = $pkg->new();
    $realm ||= $self->{DEFAULT_REALM};
+
+   my @keys = split( '->', $key );
+   if ( @keys > 1 ) {
+       my $retval;
+       try eval {
+	   $retval = $self->_deep_get( \@keys, $realm, $self->{REGISTRY}->{ $realm } );
+       };
+       if ( catch my $e ) {
+	   return;
+       }
+       return $retval;
+   }
    return $self->{REGISTRY}->{ $realm }->{ $key };
+}
+
+sub _deep_get {
+   my ($pkg, $keys, $realm, $reg_ref) = @_;
+   my $key = shift @$keys;
+
+   if ( @$keys == 0 ) {
+       if ( exists( $reg_ref->{ $key } ) ) {
+	   return $reg_ref->{ $key };
+       }
+       else {
+	   Activator::Exception::Registry->throw( 'key', 'invalid', $key );
+       }
+   }
+
+   if ( exists( $reg_ref->{ $key } ) ) {
+       return $pkg->_deep_get( $keys, $realm, $reg_ref->{ $key } );
+   }
+   else {
+       Activator::Exception::Registry->throw( 'key', 'invalid', $key );
+   }
 }
 
 =head2 get_realm( $realm )
 
-=over
-
 Return a reference to hashref for an entire C<$realm>.
-
-=back
 
 =cut
 
@@ -250,92 +407,25 @@ sub get_realm {
 }
 
 
-=head2 merge_hashes( $left_hr, $right_hr, $precedence )
+=head2 set_default_realm( $realm )
 
-
-=over
-
-THIS DOES NOT WOIK.
-
-Merge two hashes together, return a reference to the new hash.
-
-When precedence is C<left>(default), new keys are added from C<$right_hr>. When precedence is C<right> new keys are added from C<$left_hr>.
-
-Precedent side's values never get stomped.
-
-See L<Hash::Merge> for more information on merge methodology. This
-method uses the C<LEFT_PRECEDENCE> and C<RIGHT_PRECEDENCE>.
-
-=back
+Use C<$realm> instead of 'default' for default realm calls.
 
 =cut
 
-sub merge_hashes {
-    my ( $self, $lefthash, $righthash, $precedence ) = @_;
+sub set_default_realm {
+   my ($pkg, $realm) = @_;
 
-    # safety check inputs
-    if ( !UNIVERSAL::isa( $lefthash, 'HASH' ) ) {
-	DEBUG( "LEFT is not a hashref: " . Dumper( $lefthash ) );
-	Activator::Exception::Registry->throw( 'left', 'not_a_hashref' );
-    }
-
-    if ( !UNIVERSAL::isa( $righthash, 'HASH' ) ) {
-	DEBUG( "RIGHT is not a hashref: " . Dumper( $righthash ) );
-	Activator::Exception::Registry->throw( 'right', 'not_a_hashref' );
-    }
-
-    if ( $precedence ne 'right' and $precedence ne 'left' ) {
-	Activator::Exception::Registry->throw( 'precedence', 'invalid', $precedence );
-    }
-
-    my ( $left, $right );
-    if ( $precedence eq 'left' ) {
-	$left = $lefthash;
-	$right = $righthash;
-    }
-    elsif ( $precedence eq 'right' ) {
-	$right = $lefthash;
-	$left = $righthash;
-    }
-
-    # process the right hash
-    foreach my $rightkey ( keys %$right ) {
-
-	# copy/merge right to left if left does not exist
-	if ( !exists $left->{ $rightkey } ) {
-
-	    # if right is a hash, recurse
-	    if ( UNIVERSAL::isa( $right->{ $rightkey }, 'HASH')) {
-		# set left ref to an anonymous hashref of the deeply merged hashes
-		$left->{ $rightkey } = &merge_hashes ( {}, $right->{ $rightkey } );
-		return if !$left->{ $rightkey };
-	    }
-
-	    # not a hash. just copy
-	    else {
-		$left->{ $rightkey } = $right->{ $rightkey };
-	    }
-	}
-
-	# merge right to left if left is a hash
-	elsif ( UNIVERSAL::isa( $left->{ $rightkey }, 'HASH')) {
-	    $left->{ $rightkey } = &merge_hashes ( $left->{ $rightkey }, $right->{ $rightkey } );
-	    return if !$left->{ $rightkey };
-	}
-    }
-
-    return $left;
+   my $self = $pkg->new();
+   $self->{DEFAULT_REALM} = $realm;
 }
 
-=head2 replace_in_realm( $replacements, $realm )
-
-=over
+=head2 replace_in_realm( $realm, $replacements )
 
 Replace variables matching C<${}> notation with the values in
-C<$replacements>. Optionally, do it only for C<$realm>. If C<$realm>
-is not specified, acts on only the C<default> realm.
-
-=back
+C<$replacements>. C<$realm> must be specified. Use C<'default'> for
+the default realm. Keys that refer to other keys in the realm are
+processed AFTER the passed in C<$replacements> are processed.
 
 =cut
 
@@ -345,28 +435,24 @@ sub replace_in_realm {
 
     my $reg = $self->get_realm( $realm );
     if ( !keys %$reg ) {
-	Activator::Exception::Registry->throw( 'realm', 'invalid', $precedence );
+	Activator::Exception::Registry->throw( 'realm', 'invalid', $realm );
     }
 
-    DEBUG("replacing (realm '$realm') ". Dumper($reg) . "\n ---- with ----\n". Dumper($replacements));
+    TRACE("replacing (realm '$realm') ". Dumper($reg) . "\n ---- with ----\n". Dumper($replacements));
     $self->replace_in_hashref( $reg, $replacements );
-    DEBUG("Done replacing. End result: ". Dumper($reg));
+    $self->replace_in_hashref( $reg, $reg );
+    TRACE("Done replacing. End result: ". Dumper($reg));
 }
 
 =head2 replace_in_hashref( $hashref, $replacements )
 
-=over
-
 Replace withing the values of C<$hashref> keys, variables matching
 C<${}> notation with the values in C<$replacements>.
-
-=back
 
 =cut
 
 sub replace_in_hashref {
     my ( $pkg, $hashref, $replacements ) = @_;
-
     foreach my $key ( keys %$hashref ) {
 
 	# if key is a hash, recurse
@@ -377,55 +463,79 @@ sub replace_in_hashref {
 	# if key is an array, do replacements for each item
 	elsif ( UNIVERSAL::isa( $hashref->{ $key }, 'ARRAY')) {
 	    for( my $i = 0; $i < @{ $hashref->{ $key } }; $i++ ) {
-		my $elem = @{ $hashref->{ $key }}[ $i ];
-		@{ $hashref->{ $key }}[ $i ] = $pkg->get_replaced_string( $elem, $replacements );
+		@{ $hashref->{ $key }}[ $i ] =
+		  $pkg->do_replacements( @{ $hashref->{ $key }}[ $i ],
+					 $replacements,
+					 0 );
 	    }
 	}
 
 	# if key is a string just do the replacment for the string
 	else {
-	    $hashref->{ $key } = $pkg->get_replaced_string( $hashref->{ $key }, $replacements );
+	    $hashref->{ $key } =
+	      $pkg->do_replacements( $hashref->{ $key },
+				     $replacements,
+				     0 );
 	}
-
     }
+}
+
+=head2 do_replacements ( $string, $replacements )
+
+Helper subroutine to allow recursive replacements of C<${}> notation
+with values in C<$replacements>. Returns the new value.
+
+=cut
+
+sub do_replacements {
+    my ( $pkg, $string, $replacements, $depth ) = @_;
+
+    my ( $replacement_str, $num_replaced ) = $pkg->get_replaced_string( $string, $replacements );
+
+    if ( $num_replaced > 0 && $replacement_str =~ /\$\{[^\}]+\}/ ) {
+	$replacement_str = $pkg->do_replacements( $replacement_str, $replacements, $depth+1 );
+    }
+
+    $string = $replacement_str;
+    return $string;
 }
 
 =head2 get_replaced_string( $target, $replacements )
 
-=over
-
-Return the value of C<$target> after replacing variables matching
-C<${}> notation with the values in C<$replacements>.
-
-=back
+In scalar context, return the value of C<$target> after replacing
+variables matching C<${}> notation with the values in
+C<$replacements>. If a variable exists, but there is no replacement
+value, it is not changed. In list context, returns the string and the
+number of replacements.
 
 =cut
 
 sub get_replaced_string {
     my ( $pkg, $target, $replacements ) = @_;
-
+    my $num_replaced = 0;
     my @matches = ( $target =~ /\$\{([^\}]+)/g );
     if ( @matches ) {
-	DEBUG( "found variables: (".join (',',@matches) . ") in target '$target'");
+	TRACE( "found variables: (".join (',',@matches) . ") in target '$target'");
 	map {
 	    my $replace = $replacements->{ $_ };
 	    if ( defined $replace ) {
 		$target =~ s/\$\{$_\}/$replace/g;
-		DEBUG("Replaced '\${$_}' with '$replace'. target is '$target'");
+		TRACE("Replaced '\${$_}' with '$replace'. target is '$target'");
+		$num_replaced++;
 	    } else {
-		DEBUG("Skipped variable '$_'. Does not have a replacement value.");
+		# TODO: figure out how to warn the context of this
+		WARN("Skipped variable '$_'. Does not have a replacement value.");
 	    }
 	} @matches;
     }
     else {
-	DEBUG( "No variables to replace in '$target'");
+	TRACE( "No variables to replace in '$target'");
     }
-    return $target;
+    return wantarray ? ( $target, $num_replaced ) : $target;
 }
 
-
 # register_hash helpers for when using SAFE_LEFT_PRECEDENCE merging
-# not currently used
+# TODO (not currently used)
 sub die_array_scalar {
 
     die "Can't coerce ARRAY into SCALAR\n" .
@@ -463,22 +573,30 @@ sub die_array_hash {
 
 =over
 
-=item * Deep C<get>ting
+=item * Fix warning messages
 
-At this time, you cannot C<get> from deep within the heirarchy:
-you must get the top level key then fetch it yourself. In the future
-we will support arrow notation:
+If you create a script that uses this module (or some other activator
+module that depends on this module), the warning messages are rather
+arcane. This script:
 
-  Activator::Registry->get('top->deep->deeper');
+  #!/usr/bin/perl
+  use strict;
+  use warnings;
+  use Activator::DB;
+  Activator::DB->getrow( 'select * from some_table', [],  connect->'default');
 
-=item * Dynamic Reloading
+Run this way:
 
-It'd probably be nice to be able to force reload so you could edit
-your registry file programatically.
+  ./test.pl
 
-=item * Hash merging doesn't belong here
+Produces this error:
 
-In the future, merge_* methods will be removed.
+  activator_db_config missing You must define the key "Activator::DB" or "Activator->DB" in your project configuration
+
+Probably should say something about the fact that you should have run it like this:
+
+  ACT_REG_YAML_FILE=/path/to/registry.yml ./test.pl
+
 
 =item * Utilize other merge methods
 
@@ -494,11 +612,11 @@ L<Exception::Class::TryCatch>, L<Class::StrongSingleton>
 
 =head1 AUTHOR
 
-Karim Nassar ( karim.nassar@acm.org )
+Karim A. Nassar ( karim.nassar@acm.org )
 
 =head1 License
 
-The Activator::Registry module is Copyright (c) 2007 Karim Nassar.
+The Activator::Registry module is Copyright (c) 2007 Karim A. Nassar.
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, or as specified in the Perl README file.

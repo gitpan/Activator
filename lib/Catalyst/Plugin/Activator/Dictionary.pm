@@ -12,26 +12,34 @@ L<Activator::Dictionary> C<lookup()> function, and template lookup magic.
 =head1 SYNOPSIS
 
   # in MyApp.pm
-  use Catalyst qw/ Activator::Plugin /;
+  use Catalyst qw/ Activator::Dictionary /;
 
-  # Later, in some Controller
-  $c->lookup('dict_key');
+  # Configure Activator::Dictionary
+
+  # Later, in some controller:
+  my $msg = $c->lookup( 'look_me_up' );
+
+  # Even later, in some template:
+  <p>%{look_me_up_too}</p>
+
 
 =head1 DESCRIPTION
 
-This Catalyst plugin provides the two features listed in the L<METHODS> section.
-
-=head1 METHODS
+This Catalyst plugin provides a lookup subroutine and a template shortcut syntax for L<Activator::Dictionary>.
 
 =head2 lookup
 
-Provides a wrapper to L<Activator::Dictionary> lookup function usable
+Gets the value for a key (using L<Activator::Dictionary> lookup() sub)
 wherever you have access to the catalyst context object C<$c>.
 
-  # lookup in C<web> realm
+Since L<Activator::Dictionary> provides different realms, we default this plugin to the web realm:
+
+  # uses web realm
   $c->lookup('dict_key');
 
-  # lookup in alternate realm
+However, we can use any other realm we desire:
+
+  $c->lookup('dict_key', 'error');
   $c->lookup('dict_key', 'other_realm');
 
 =cut
@@ -44,9 +52,13 @@ sub lookup {
 };
 
 
-=head2 finalize
+=head2 Automated lookups from templates
 
-Does a regular expression replacement of C<%{}> formatted keys into
+When using this plugin from templates, we provide a special syntax for
+automated lookups.
+
+During the finalize stage of the Catalyst execution stack, this plugin
+does a regular expression replacement of C<%{}> formatted keys into
 dictionary lookups from the C<web> realm.
 
 Example:
@@ -86,11 +98,11 @@ L<Activator::Dictionary>, L<Catalyst>, L<Catalyst::Manual::Plugins>
 
 =head1 AUTHOR
 
-Karim Nassar
+Karim A. Nassar
 
 =head1 COPYRIGHT
 
-Copyright (c) 2007 Karim Nassar <karim.nassar@acm.org>
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
 You may distribute under the terms of either the GNU General Public
 License, or the Artistic License as specified in the Perl

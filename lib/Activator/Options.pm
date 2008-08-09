@@ -9,6 +9,9 @@ use base 'Class::StrongSingleton';
 
 =head1 NAME
 
+THIS MODULE DEPRECATED. USE L<Activator::Config> instead.
+
+
 C<Activator::Options> - process options for a script combining command
 line, environment variables, and configuration files.
 
@@ -16,7 +19,6 @@ line, environment variables, and configuration files.
 
   use Activator::Options;
 
-  #### Then access keys from:
   my $opts = Activator::Options->get_opts( \@ARGV);  # default realm
   my $opts = Activator::Options->get_opts( \@ARGV, $otherrealm);
 
@@ -359,7 +361,7 @@ sub get_opts {
     my $self = &new( @_ );
     my $argx = {};
 
-    # make sure $self->{ARGV} is set
+    # get_args sets $self->{ARGV}
     $self->get_args( $argv );
     DEBUG( Data::Dumper->Dump( [ $self->{ARGV} ], [ qw/ ARGV / ] ) );
     DEBUG( Data::Dumper->Dump( [ $self->{BAREWORDS} ], [ qw /BAREWORDS/ ] ) );
@@ -776,7 +778,7 @@ sub _process_config_for {
 
 }
 
-# Override any options in $opts with the values in $argv.
+# Override any options in $opts with the values in $argv. Sets non-existent keys.
 #
 # Arguments:
 #   $opts  : hashref to the options for $realm
@@ -820,14 +822,7 @@ sub _argv_override {
 #	    }
 #	}
 
-	if ( exists( $opts->{ $key } ) ) {
-	    DEBUG("Overriding '$key' with '$value'");
-	    $opts->{ $key } = $value;
-	}
-	else {
-	    DEBUG("Ignoring unrecognized key '$key'");
-	    push @unrec, $arg;
-	}
+	$opts->{ $key } = $value;
     }
     unshift @$argv, @unrec;
 
@@ -948,11 +943,11 @@ module is capable of.
 
 =head1 AUTHOR
 
-Karim Nassar
+Karim A. Nassar
 
 =head1 COPYRIGHT
 
-Copyright (c) 2007 Karim Nassar <karim.nassar@acm.org>
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, as specified in the Perl README file.

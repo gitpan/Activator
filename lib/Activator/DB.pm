@@ -65,14 +65,14 @@ sub connect {
 	    $self->_debug_connection( 2, 'Connect Parameters:');
 	    $self->_debug_connection( 2, "   dsn  => $conn->{dsn}");
 	    $self->_debug_connection( 2, "   user => $conn->{user}");
-	    $self->_debug_connection( 2, "   pass => $conn->{pass}");
+	    $self->_debug_connection( 2, '   pass => ' . ( $conn->{pass} || ''));
 	    $self->_debug_connection( 2, Data::Dumper->Dump( [ $conn->{attr} ], [ '  attr' ] ) );
 
 	    try eval {
 		$conn->{dbh} = DBI->connect( $conn->{dsn},
-					     $conn->{user},
-					     $conn->{pass},
-					     $conn->{attr},
+					     $conn->{user} || '',
+					     $conn->{pass} || '',
+					     $conn->{attr}
 					   );
 	    };
 
@@ -86,8 +86,12 @@ sub connect {
 
 	    # TODO: do something more generic with this
 	    # mysql_auto_reconnect now cannot be disconnected
-	    $conn->{dbh}->{mysql_auto_reconnect} = $self->{config}->{mysql_auto_reconnect};
-
+	    if ( $conn->{dsn} =~ /mysql/i ) {
+		$conn->{dbh}->{mysql_auto_reconnect} = $self->{config}->{mysql}->{auto_reconnect};
+	    }
+	    elsif ( my $search_path = $conn->{config}->{Pg}->{search_path} ) {
+		$self->do("SET search_path TO ?", [ $search_path ]);
+	    }
 	    # test cur_alias $conn->{dbh}, may throw exception
 	    $self->_ping();
 	    $self->_debug_connection( 2, "alias '$conn->{alias}' db handle pinged and ready for action");
@@ -95,7 +99,7 @@ sub connect {
 	if ( catch my $e ) {
 	    $e->rethrow;
 	}
-	
+
     }
 
     return $self;
@@ -106,7 +110,10 @@ sub _init {
     $self->_start_timer();
     my $setup = Activator::Registry->get( 'Activator::DB' );
     if (!keys %$setup ) {
-	Activator::Exception::DB->throw( 'config', 'missing' );
+	$setup = Activator::Registry->get( 'Activator->DB' );
+	if (!keys %$setup ) {
+	    Activator::Exception::DB->throw( 'activator_db_config', 'missing', 'You must define the key "Activator::DB" or "Activator->DB" in your project configuration' );
+	}
     }
 
     # module defaults
@@ -115,7 +122,8 @@ sub _init {
 			debug_attr       => 0,
 			reconn_att       => 3,
 			reconn_sleep     => 1,
-			mysql_auto_reconnect => 1,
+			mysql => { auto_reconnect => 1 },
+			Pg    => { search_path => 'public' },
 		      };
     $self->{attr} = {   RaiseError   => 0,
 			PrintError   => 0,
@@ -161,6 +169,9 @@ sub _init {
     my $conns = $setup->{connections};
 
     foreach my $alias ( keys( %$conns ) ) {
+	my $engine;
+	$engine = 'mysql' if $conns->{ $alias }->{dsn} =~ /mysql/;
+	$engine = 'Pg'    if $conns->{ $alias }->{dsn} =~ /Pg/;
 	$self->{connections}->{ $alias }  =
 	  {
 	   dsn    => $conns->{ $alias }->{dsn},
@@ -176,6 +187,7 @@ sub _init {
 	   },
 	   config => $self->{config},
 	   alias => $alias,
+           engine => $engine,
 	  };
 
 	# setup default config
@@ -283,9 +295,10 @@ sub _explode {
 }
 
 # This can never die, so we jump through hoops to return some valid scalar.
-# * If $bind is of wrong type, don't do substitutions.
-# * shift @vals to handle the case of '?' in the bind values
-# * @vals? in the regexp is to handle fewer args on the right than the left
+#     * replace undef values with NULL, since this is how dbi will do it
+#     * If $bind is of wrong type, don't do substitutions.
+#     * shift @vals to handle the case of '?' in the bind values
+#     * @vals? in the regexp is to handle fewer args on the right than the left
 # TODO: support attrs in debug
 sub _get_sql {
     my ( $pkg, $sql, $bind ) = @_;
@@ -294,7 +307,15 @@ sub _get_sql {
 
     if ( ref( $bind ) eq 'ARRAY' ) {
 	my @vals = @$bind;
-	$sql =~ s/\?/@vals? '\'' . (shift @vals) . '\'' : '?'/egos;
+ 	map {
+ 	    if ( !defined($_) ) {
+ 		$_ = 'NULL';
+ 	    }
+ 	    else {
+ 		$_ =  "'$_'";
+ 	    } } @vals;
+ 	$sql =~ s/\?/@vals? (shift @vals) : '?'/egos;
+
 	return $sql;
     }
     else {
@@ -311,13 +332,14 @@ sub _get_sth {
 
     my $conn = $self->_get_cur_conn();
     my $sth;
+
     try eval {
-	$sth = $conn->{dbh}->prepare( $sql, $attr );
+	$sth = $conn->{dbh}->prepare_cached( $sql, $attr );
     };
     if ( catch my $e ) {
 	$self->_ping();
 	try eval {
-	    $sth = $conn->{dbh}->prepare( $sql, $attr );
+	    $sth = $conn->{dbh}->prepare_cached( $sql, $attr );
 	};
 	if ( catch my $e ) {
 	    Activator::Exception::DB->throw( 'sth',
@@ -388,6 +410,7 @@ sub getall_hashrefs {
 sub _fetch {
     my ( $fn, $pkg, $sql, $bindref, %args ) = @_;
     my ( $self, $bind, $attr ) = $pkg->_explode( $bindref, \%args );
+
     $self->_start_timer();
 
     my $conn = $self->_get_cur_conn();
@@ -463,7 +486,8 @@ sub do_id {
     my ( $pkg, $sql, $bindref, %args ) = @_;
     my ( $self, $bind, $attr ) = $pkg->_explode( $bindref, \%args );
     my $conn = $self->_get_cur_conn();
-    $self->{debug_start} = [ gettimeofday ];
+
+    $self->_start_timer();
 
     my $res;
     try eval {
@@ -476,7 +500,13 @@ sub do_id {
     $self->_debug_sql( 4, $sql, $bind, \%args );
 
     if ( $res == 1 ) {
-	return $conn->{dbh}->{mysql_insertid};
+	if ( $conn->{engine} eq 'mysql' ) {
+	    return $conn->{dbh}->{mysql_insertid};
+	}
+	elsif ( $conn->{engine} eq 'Pg' ) {
+	    my $row = $self->getrow_arrayref( "SELECT currval('$args{seq}')" );
+	    return @$row[0];
+	}
     } else {
 	Activator::Exception::DB->throw('execute',
 					'failure',
@@ -490,7 +520,8 @@ sub do {
     my ( $pkg, $sql, $bindref, %args ) = @_;
     my ( $self, $bind, $attr, $alt_error ) = $pkg->_explode( $bindref, \%args );
     my $conn = $self->_get_cur_conn();
-    $self->{debug_start} = [ gettimeofday ];
+
+    $self->_start_timer();
 
     my $res;
     try eval {
@@ -506,6 +537,54 @@ sub do {
 	return 0;
     }
     return $res;
+}
+
+# allow diconnection before DESTROY is called
+sub disconnect_all {
+    my ( $pkg ) = @_;
+    my $self = $pkg->connect('default');
+    foreach my $conn ( keys %{ $self->{connections} } ) {
+	if ( exists( $self->{connections}->{ $conn }->{dbh} ) ) {
+	    $self->{connections}->{ $conn }->{dbh}->disconnect();
+	}
+    }
+}
+
+# Transaction support
+sub begin_work {
+    my ( $self ) = @_;
+    $self->begin();
+}
+
+sub begin {
+    my ( $self ) = @_;
+    my $conn = $self->_get_cur_conn();
+    $conn->{dbh}->{AutoCommit} = 0;
+}
+
+sub commit {
+    my ( $self ) = @_;
+    my $conn = $self->_get_cur_conn();
+    $conn->{dbh}->commit;
+    $conn->{dbh}->{AutoCommit} = 1;
+}
+
+sub abort {
+    my ( $self ) = @_;
+    $self->rollback();
+}
+
+sub rollback {
+    my ( $self ) = @_;
+    my $conn = $self->_get_cur_conn();
+    try eval {
+	$conn->{dbh}->rollback;
+    };
+    catch my $e;
+    $conn->{dbh}->{AutoCommit} = 1;
+    if ( $e ) {
+        $e->rethrow;
+    }
 }
 
 sub as_string {
@@ -555,6 +634,17 @@ sub _debug {
 	DEBUG( $msg );
     }
 }
+
+sub begin_debug {
+    my ( $self ) = @_;
+    $self->{config}->{debug} = 1;
+}
+
+sub end_debug {
+    my ( $self ) = @_;
+    $self->{config}->{debug} = 0;
+}
+
 
 =head1 NAME
 
@@ -648,8 +738,8 @@ Provide consistent arguments handling to all query functions.
 
 =item *
 
-Connection caching without Apache::DBI (allows use of library/model
-code in crons AND website).
+Provides connection caching without Apache::DBI -- this allows use of
+your model layer code in crons, daemons AND website.
 
 =item *
 
@@ -667,7 +757,8 @@ By default, dies on all errors enforcing try/catch programming
 
 =item *
 
-Implemented as a singleton so each process is guranteed to be using no more than one connection to each database from the pool.
+Implemented as a singleton so each process is guranteed to be using no
+more than one connection to each database from the pool.
 
 =back
 
@@ -685,7 +776,7 @@ NOT THREAD SAFE
 
 =item *
 
-Only tested with MySql
+Only tested with MySql and PostgreSQL
 
 =back
 
@@ -720,7 +811,7 @@ Add an C<Activator::DB> section to your project YAML configuration file:
      default:                # default configuration for all connections
        connection: <conn_alias>
 
-   ## The rest of this section is optional
+   ## Optional default attributes and config for all connections
        config:
          debug:      0/1     # default: 0, affects all queries, all aliases
          reconn_att: <int>   # attempt reconnects this many times. default: 3
@@ -734,8 +825,10 @@ Add an C<Activator::DB> section to your project YAML configuration file:
        <conn_alias>:
          user: <user>
          pass: <password>
-         dsn: '<DSN>' # see perldoc DBI for descriptions of valid DSNs
-                      # MySql Example: DBI:mysql:<DBNAME>:<DBHOST>
+         dsn: '<DSN>' # MySql Example: DBI:mysql:<DBNAME>:<DBHOST>
+                      # PostgreSQL Example: DBI:Pg:dbname=<DBNAME>
+                      # see: perldoc DBI, perldoc DBD::Pg, perldoc DBD::mysql
+                      # for descriptions of valid DSNs
 
    ## These attributes and config are all optional, and use the default from above
          attr:
@@ -914,7 +1007,7 @@ C<getall()> is an alias for C<getall_arrayrefs()> and they both return an
 arrayref of arrayrefs, one arrayref of values for each row of data
 from the query.
 
-  $rowrefs is [ [ row1_col1_val, row1_col2_val ], 
+  $rowrefs is [ [ row1_col1_val, row1_col2_val ],
                 [ row2_col1_val, row2_col2_val ],
               ];
 
@@ -961,11 +1054,11 @@ L<DBI>, L<Activator::Registry>, L<Activator::Log>, L<Activator::Exception>, L<Ex
 
 =head1 AUTHOR
 
-Karim Nassar
+Karim A. Nassar
 
 =head1 COPYRIGHT
 
-Copyright (c) 2007 Karim Nassar <karim.nassar@acm.org>
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, as specified in the Perl README file.

@@ -3,7 +3,7 @@ use strict;
 
 =head1 NAME
 
-      Activator::Pager - Object to assist in implementing pagination interfaces
+Activator::Pager - Object to assist in implementing pagination interfaces
 
 =head1 SYNOPSIS
 
@@ -87,7 +87,12 @@ sub new {
     # Last page is total/length when evenly divisible. We mod them, if
     # there is remainder, add 1 for the last page. EG: 101/10 == 10
     # pages + 1 on the last page
+    #
+    # this new hotness courtesy Frank Wallingford
+    # TODO: write pager tests, use this formula
+    #$self->{last_page} = int(($total + ( $page_size - 1 ) ) / $page_size );
 
+    # old and crufty
     $self->{last_page} = int($total/$page_size) + ( ($total % $page_size > 0) ? 1 : 0 );
 
     ## last offset
@@ -96,11 +101,17 @@ sub new {
     # divisible so that we don't offset off the end of the available
     # results. If there is a remainder, subtract nothing.
     #WARN( qq{  ($self->{last_page} * $page_size) - ( ($total % $page_size > 0) ? 0 : $page_size)  });
+
+    # this new hotness courtesy Frank Wallingford
+    # TODO: write pager tests, use this formula
+    #$self->{last_offset} = int( ( $total - 1 ) / $page_size ) + 1;
+
+    # old and crufty
     $self->{last_offset} = int($total/$page_size) * $page_size - ( ($total % $page_size > 0) ? 0 : $page_size ); ;
 
 
     ## cur page offset
-    $self->{cur_page} = int($offset/$page_size) + 1;
+    $self->{cur_page} = int( $offset / $page_size ) + 1;
 
     ## prev
     if( $offset - $page_size >= 0 ) {
@@ -125,18 +136,20 @@ sub new {
     return $self;
   }
 
-=head2 TODO
+=head2 FUTURE WORK
 
 Implement getter functions if anyone wants it. We just access the vars
 directly at this time.
 
+This module would be nicer if it did more magic such that I can include pagination trivially in a template.
+
 =head1 AUTHOR
 
-Karim Nassar
+Karim A. Nassar
 
 =head1 COPYRIGHT
 
-Copyright (c) 2007 Karim Nassar <karim.nassar@acm.org>
+Copyright (c) 2007 Karim A. Nassar <karim.nassar@acm.org>
 
 You may distribute under the terms of either the GNU General Public
 License or the Artistic License, as specified in the Perl README file.

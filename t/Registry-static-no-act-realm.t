@@ -1,22 +1,16 @@
 #!/usr/bin/perl -w
 
-use Test::More tests => 9;
+use Test::More tests => 8;
 use Activator::Registry;
-use Activator::Log;
-use Data::Dumper;
 
 BEGIN {
-    $ENV{ACT_REG_YAML_FILE} ||= "$ENV{PWD}/t/data/Registry-test.yml";
+    $ENV{ACT_REG_YAML_FILE} ||= "$ENV{PWD}/t/data/Registry-test-no-act-realm.yml";
 }
 
-Activator::Log->level('DEBUG');
-
 # basic functionality
-my $realm = Activator::Registry->get_realm( 'default');
 my $list = Activator::Registry->get( 'list_of_5_letters');
 ok( defined ( $list ), 'key defined');
-ok( ref( $list ) eq 'ARRAY', 'key is list' );
-ok( scalar @$list == 5, 'list is correct size' );
+ok( @$list == 5, 'key is list' );
 ok( @$list[4] eq 'e', 'value match' );
 
 # deep structs maintained

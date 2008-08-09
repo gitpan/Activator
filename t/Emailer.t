@@ -6,11 +6,16 @@ use Test::More;
 use Test::Exception;
 use Data::Dumper;
 
-plan skip_all => 'set TEST_ACT_EMAILER to enable this test' unless $ENV{TEST_ACT_EMAILER};
+if ( ! $ENV{TEST_ACT_EMAILER_ADDR} ) {
+    plan skip_all => 'set TEST_ACT_EMAILER_ADDR (a "to" address) to enable this test';
+}
+else {
+    plan tests => 1;
+}
 
 # DEFINE THIS TO TEST
-my $to = '';
-
+my $to = $ENV{ACT_EMAILER_TEST_ADDR};
+my $cc = $ENV{ACT_EMAILER_TEST_CC};
 BEGIN {
     $ENV{ACT_REG_YAML_FILE} = "$ENV{PWD}/t/data/Emailer/registry.yml";
 }
@@ -19,22 +24,27 @@ use Activator::Emailer;
 use Activator::Log;
 Activator::Log->level('DEBUG');
 
-my $tt_vars = { name => 'Karim Nassar' };
+my $tt_vars = {
+	       name => 'Karim Nassar',
+	       to          => $to,
+	       cc          => $cc,
+	      };
 my $mailer = Activator::Emailer->new(
 				     To          => $to,
-				     Subject     => 'Final Test? ',
+				     Cc          => $cc,
+				     Subject     => 'Activator::Emailer Test Email',
 				     html_body   => 'html_body.tt',
 				     tt_options  => { INCLUDE_PATH => "$ENV{PWD}/t/data/Emailer" },
 				    );
 
 # future test
-#$mailer->attach(
-#		Type        => 'application/msword',
-#		Path        => '/home/knassar/rebates.com_mission.doc',
-#		Filename    => 'mission.doc',
-#		Disposition => 'attachment' );
+$mailer->attach(
+		Type        => 'application/msword',
+		Path        => "$ENV{PWD}/t/data/Emailer/test-mission.doc",
+		Filename    => 'Test Mission.doc',
+		Disposition => 'attachment' );
 
-print Dumper( $mailer)."\n";
+#print Dumper( $mailer)."\n";
 
 lives_ok {
     $mailer->send( $tt_vars );

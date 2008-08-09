@@ -27,6 +27,8 @@ within an Activator project.
   #### Alternate log levels
   Activator::Log->level( $level );
 
+TODO: test that logger exists before logging. that is, fallback to warn or die or something.
+
 =head1 DESCRIPTION
 
 This module provides a simple wrapper for L<Log::Log4perl> that allows
@@ -72,6 +74,19 @@ this module:
   Activator::Log->DEBUG( $msg );
   Activator::Log->TRACE( $msg );
 
+=head2 Setting Log Level Dynamically
+
+You can set the minimum level with the C<level> sub:
+
+  # only show only levels WARN, ERROR and FATAL
+  Activator::Log->level( 'WARN' ); 
+
+  # only show only levels ERROR and FATAL
+  Activator::Log->level( 'ERROR' ); 
+
+Note that since C<Activator::Log> is a singleton, this sub will set
+the level for the entire process. This is probably fine for cron jobs,
+not so good for web processes.
 
 =head2 Additional Functionality provided
 
@@ -115,22 +130,30 @@ configuration in this heirarchy:
       'log4perl.key2': 'value2'
       ... etc.
 
-3) If none of the above are set, C<Activator::Log> defaults to
-C<STDERR> exactly as shown below.
+3) If none of the above are set, C<Activator::Log> defaults to showing WARN level to
+C<STDERR> as shown in this log4perl configuration:
 
-Note that even if C<log4perl.conf> or C<log4perl> is set,
-L<Log::Log4perl> by default doesn't log anything. You must properly
-configure it for this module. As an example, the (hash format)
-configuration used by this module for logging to STDERR (#4 above) is:
+  log4perl.logger.Activator.DB = WARN, Screen
+  log4perl.appender.Screen = Log::Log4perl::Appender::Screen
+  log4perl.appender.Screen.layout = Log::Log4perl::Layout::PatternLayout
+  log4perl.appender.Screen.layout.ConversionPattern = %d{yyyy-mm-dd HH:mm:ss.SSS} [%p] %m (%M %L)%n
 
-  'log4perl.logger.Activator.DB' => 'WARN, Screen',
-  'log4perl.appender.Screen' => 'Log::Log4perl::Appender::Screen',
-  'log4perl.appender.Screen.layout' => 'Log::Log4perl::Layout::PatternLayout',
-  'log4perl.appender.Screen.layout.ConversionPattern' => '%d{yyyy-mm-dd HH:mm:ss.SSS} [%p] %m (%M %L)%n',
 
-Consult with L<Log::Log4perl> documentation for more information on
-how to create the C<log4pler.conf> file, or the C<log4perl> registry
-entry.
+NOTE: If C<log4perl.conf> or C<log4perl> is set, it is possible you
+will see no logging since L<Log::Log4perl> by default doesn't log
+anything. That is, you could have configured this module properly, but
+still see no logging.
+
+NOTE 2: You must properly configure L<Log::Log4perl> for this module!
+
+=head2 Setting the Default Logger
+
+Log4Perl can have multiple definitions for loggers. If your script or
+program has a preferred logger, set the Registry key 'logger':
+
+ 'Activator::Registry':
+    'Activator::Log':
+      'logger': <logger name IN log4perl.conf>
 
 =head2 Setting the Default Log Level
 
@@ -197,7 +220,14 @@ sub new {
 	# do nothing, logger already set
     }
     else {
+
+	# old config format
 	my $config = Activator::Registry->get('Activator::Log');
+	if ( !$config ) {
+	    # new format
+	    $config = Activator::Registry->get('Activator->Log');
+	}
+
 	$self->{DEFAULT_LEVEL} =
 	  $level ||
 	    $config->{default_level} ||
@@ -205,14 +235,24 @@ sub new {
 
 	$l4p_config = Activator::Registry->get('log4perl.conf') ||
 	  Activator::Registry->get('log4perl') ||
-	      { 'log4perl.logger.Activator.Log' => "$self->{DEFAULT_LEVEL}, Screen",
-		'log4perl.appender.Screen' => 'Log::Log4perl::Appender::Screen',
-		'log4perl.appender.Screen.layout' => 'Log::Log4perl::Layout::PatternLayout',
-		'log4perl.appender.Screen.layout.ConversionPattern' => '%d{yyyy-mm-dd HH:mm:ss.SSS} [%p] %m (%M %L)%n',
-	      };
+	      $config->{'log4perl.conf'} ||
+		$config->{'log4perl'} ||
+		  { 'log4perl.logger.Activator.Log' => $self->{DEFAULT_LEVEL}.', Screen',
+		    'log4perl.appender.Screen' => 'Log::Log4perl::Appender::Screen',
+		    'log4perl.appender.Screen.layout' => 'Log::Log4perl::Layout::PatternLayout',
+		    'log4perl.appender.Screen.layout.ConversionPattern' => '%d{yyyy-MM-dd HH:mm:ss.SSS} [%p] %m (%M %L)%n',
+		  };
 	Log::Log4perl->init_once( $l4p_config );
 	$Log::Log4perl::caller_depth++;
-	$self->{LOGGER} = Log::Log4perl->get_logger();
+
+	# look for a specific logger to use
+	if ( exists $config->{logger} ) {
+	    $self->{LOGGER} = Log::Log4perl->get_logger( $config->{logger} );
+	}
+	else {
+	    # just get the default Screen logger defined in log4perl.conf
+	    $self->{LOGGER} = Log::Log4perl->get_logger();
+	}
     }
 
     return $self;

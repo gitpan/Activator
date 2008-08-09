@@ -20,7 +20,7 @@ sub throw {
 sub full_message {
     my $self = shift;
 
-    my $msg = $self->error;
+    my $msg = $self->description .': ' . $self->error;
     my $code  = $self->code;
     my $extra = $self->extra;
     $msg .= " $code" if $code;
@@ -50,6 +50,10 @@ use Exception::Class (
     'Activator::Exception::Options' => {
         isa => 'Activator::Exception',
         description => 'Activator Options exception',
+    },
+    'Activator::Exception::Config' => {
+        isa => 'Activator::Exception',
+        description => 'Activator Config exception',
     },
     'Activator::Exception::Registry' => {
         isa => 'Activator::Exception',
