@@ -408,16 +408,17 @@ sub get_dict {
     }
 
     if( !exists $self->{ $lang } ) {
-	if ( $self->_init_lang( $lang ) ) {
-	    $self->{cur_lang} = $lang;
+	try eval {
+	    $self->_init_lang( $lang );
+	};
+	if ( catch my $e ) {
+	    Activator::Exception::Dictionary->throw( 'init_lang', 'failed', $e );
 	}
-	else {
-	    Activator::Exception::Dictionary->throw( 'init_lang', 'failed' );
-	}
+
     }
-    else {
-	$self->{cur_lang} = $lang;
-    }
+
+    $self->{cur_lang} = $lang;
+
     return $self;
 }
 
@@ -517,7 +518,7 @@ sub _init_lang {
 
 	    # This message could be annoying in some situations, so
 	    # allow changing the log level for just this one.
-	    my $msg = "Couldn't load dictionary from file for $lang";
+	    my $msg = "Couldn't load dictionary from file for $lang from $dir_loc";
 	    my $level = $self->{LOG_LEVEL_FOR_FILE_LOAD};
 	    if ( $level =~ /FATAL|ERROR|WARN|INFO|DEBUG|TRACE/ ) {
 		no strict 'refs';

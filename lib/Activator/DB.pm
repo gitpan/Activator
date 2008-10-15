@@ -645,7 +645,6 @@ sub end_debug {
     $self->{config}->{debug} = 0;
 }
 
-
 =head1 NAME
 
 Activator::DB - Wrap DBI with convenience subroutines and consistant

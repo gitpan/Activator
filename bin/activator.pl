@@ -131,11 +131,19 @@ sub sync {
 	push @cmds,
 	  "rsync -a $rsync_flags ".$config->{activator_codebase}."/lib/* $perl5lib";
     }
+
+    if ( $config->{sync_data_dirs} ) {
+	foreach my $dir ( @{ $config->{sync_data_dirs} } ) {
+	    push @cmds, "mkdir -p $dir";
+	}
+    }
+
     if ( my $dict_targ = $config->{Activator}->{Dictionary}->{dict_files} ) {
 	push @cmds, "ln -sf $config->{conf_path}/dict $dict_targ";
     }
     
     foreach $cmd ( @cmds ) {
+	DEBUG( $cmd );
 	die "$cmd failed" unless !system( $cmd );
     }
 
@@ -155,6 +163,7 @@ sub sync {
 
     my $reg = Activator::Registry->new();
     foreach my $config_file ( @$config_files ) {
+	DEBUG( "processing config file: $config_file");
 	my $fq_source_file = "$config->{conf_path}/$config_file";
 	my $fq_dest_file   ="$config->{sync_conf_dir}/$config_file";
 
@@ -173,6 +182,7 @@ sub sync {
 		$reg->replace_in_realm( $config_file, $config );
 
 		$YAML::Syck::SingleQuote = 1;
+		DEBUG( qq(dumping config: $fq_dest_file, ). $reg->get_realm( $config_file ) );
 		YAML::Syck::DumpFile( $fq_dest_file,
 				      # get realm returns a hashref
 				      $reg->get_realm( $config_file ) );
@@ -190,12 +200,13 @@ sub sync {
 		WARN( "Couldn't process Template file '$config_file'");
 		next;
 	    }
-	    $fq_dest_file = "$config->{sync_conf_dir}/$out";
+#	    $fq_dest_file = "$config->{sync_conf_dir}/$out";
 	    my $tt = Template->new( { DEBUG => 1,
 				      ABSOLUTE => 1,
-				      OUTPUT_PATH  => $fq_dest_file,
+				      OUTPUT_PATH  => $config->{sync_conf_dir},
 				    }
 				  );
+	    DEBUG( qq(tt processing: $fq_source_file, $config, $out ));
 	    $tt->process( $fq_source_file, $config, $out ) || Activator::Log->logdie( $tt->error()."\n");
 	}
 

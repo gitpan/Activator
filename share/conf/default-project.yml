@@ -84,6 +84,13 @@ sync_conf_dir  : ${sync_target}/etc/${project_alias}.d
 sync_log_dir  : ${sync_target}/var/log
 
 #
+# if your application needs extra directories created for its
+# functionality, list them here.
+sync_data_dirs :
+    - ${sync_target}/var/lib/${project_alias}
+    - ${sync_target}/var/tmp/${project_alias}
+
+#
 # Files listed here will be copied from ${conf_dir} to ${sync_conf_dir}. Additionally:
 # - If the file looks like a YAML file (ends in .ya?ml), variable
 #   replacement is performed and the file is written as the same name.

@@ -2,7 +2,7 @@ use Module::Build;
 
 my $build = Module::Build->new
     (
-     dist_version => '.20',
+     dist_version => '0.91',
      module_name => 'Activator',
      license     => 'perl',
      requires    => {

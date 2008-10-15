@@ -19,15 +19,18 @@ within an Activator project.
 =head1 SYNOPSIS
 
   use Activator::Log;
-  Activator::Log::WARN( $msg );
+  Activator::Log::WARN( $msg );                # logs to default logger
+  Activator::Log->WARN( $msg, $other_logger ); # logs to other logger, don't change default
+                                               # NOTE: you MUST use arrow notation!
 
   use Activator::Log qw( :levels );
   WARN( $msg );
 
-  #### Alternate log levels
-  Activator::Log->level( $level );
+  #### Use alternate default log levels
+  Activator::Log->default_level( $level );
 
-TODO: test that logger exists before logging. that is, fallback to warn or die or something.
+  #### Use alternate default loggers
+  Activator::Log->default_logger( $logger_name );
 
 =head1 DESCRIPTION
 
@@ -74,15 +77,30 @@ this module:
   Activator::Log->DEBUG( $msg );
   Activator::Log->TRACE( $msg );
 
+=head2 Using Alternate Loggers
+
+You can set the default logger dynamically:
+
+  Activator::Log->default_logger( 'My.Default.Logger' );
+
+Note that since C<Activator::Log> is a singleton, this sub will set
+the level for the entire process. This is probably fine for cron jobs,
+not so good for web processes.
+
+You can avoid trouble by logging to an alternate Log4perl logger
+without changing the default logger:
+
+  Activator::Log->DEBUG( $msg, 'My.Configured.Debug.Logger' );
+
 =head2 Setting Log Level Dynamically
 
-You can set the minimum level with the C<level> sub:
+You can set the minimum level with the C<default_level> sub:
 
   # only show only levels WARN, ERROR and FATAL
-  Activator::Log->level( 'WARN' ); 
+  Activator::Log->default_level( 'WARN' );
 
   # only show only levels ERROR and FATAL
-  Activator::Log->level( 'ERROR' ); 
+  Activator::Log->default_level( 'ERROR' );
 
 Note that since C<Activator::Log> is a singleton, this sub will set
 the level for the entire process. This is probably fine for cron jobs,
@@ -119,21 +137,23 @@ configuration in this heirarchy:
 
 1) A 'log4perl.conf' file in the registry:
 
- 'Activator::Registry':
-    log4perl.conf: <file>
+  Activator:
+    Log:
+      log4perl.conf: <file>
 
 2) A 'log4perl' config in the registry:
 
- 'Activator::Registry':
-    log4perl:
-      'log4perl.key1': 'value1'
-      'log4perl.key2': 'value2'
-      ... etc.
+  Activator:
+    Log:
+      log4perl:
+        'log4perl.key1': 'value1'
+        'log4perl.key2': 'value2'
+        ... etc.
 
 3) If none of the above are set, C<Activator::Log> defaults to showing WARN level to
 C<STDERR> as shown in this log4perl configuration:
 
-  log4perl.logger.Activator.DB = WARN, Screen
+  log4perl.logger.Activator.Log = WARN, Screen
   log4perl.appender.Screen = Log::Log4perl::Appender::Screen
   log4perl.appender.Screen.layout = Log::Log4perl::Layout::PatternLayout
   log4perl.appender.Screen.layout.ConversionPattern = %d{yyyy-mm-dd HH:mm:ss.SSS} [%p] %m (%M %L)%n
@@ -146,22 +166,24 @@ still see no logging.
 
 NOTE 2: You must properly configure L<Log::Log4perl> for this module!
 
+NOTE TO SELF: create a test sub to make life easier
+
 =head2 Setting the Default Logger
 
 Log4Perl can have multiple definitions for loggers. If your script or
-program has a preferred logger, set the Registry key 'logger':
+program has a preferred logger, set the Registry key c<default_logger>:
 
- 'Activator::Registry':
-    'Activator::Log':
-      'logger': <logger name IN log4perl.conf>
+  Activator:
+    Log:
+      default_logger: <logger name IN log4perl.conf>
 
 =head2 Setting the Default Log Level
 
 Set up your registry as such:
 
- 'Activator::Registry':
-   'Activator::Log':
-     default_level: LEVEL
+  Activator:
+    Log:
+      default_level: LEVEL
 
 Note that you can also initialize an instance of this module with the
 same affect:
@@ -178,15 +200,15 @@ this.
 
 =head2 Turn debugging OFF on a per-module basis
 
- 'Activator::Registry':
-    'Activator::Log':
+  Activator:
+    Log:
       DEBUG:
         'My::Module': 0    # My::Module will now prove "silence is bliss"
 
 =head2 Turn debugging ON on a per-module basis
 
- 'Activator::Registry':
-    'Activator::Log':
+  Activator:
+    Log:
       DEBUG:
         FORCE_EXPLICIT: 1
         'My::Module': 1    # only My::Module messages will be debugged
@@ -203,7 +225,18 @@ from a package you DO want to hear from.
 =head1 USING THIS MODULE IN WRAPPERS
 
 This module respects C<$Log::Log4perl::caller_depth>. When using this
-module from a wrapper, please consult with Log4perl "Using
+module from a wrapper, you can insure that the message appears to come
+from your module as such:
+
+  {
+    local $Log::Log4perl::caller_depth;
+    $Log::Log4perl::caller_depth += $depth;
+    Debug( 'some message' );
+  }
+
+You'll likely want to do this in a sub routine if you do a lot of logging.
+
+See also the full description of this technique in "Using
 Log::Log4perl from wrapper classes" in the Log4perl FAQ.
 
 =cut
@@ -222,189 +255,227 @@ sub new {
     else {
 
 	# old config format
-	my $config = Activator::Registry->get('Activator::Log');
-	if ( !$config ) {
-	    # new format
-	    $config = Activator::Registry->get('Activator->Log');
-	}
+	my $config =
+	  Activator::Registry->get('Activator::Log') || 
+	      Activator::Registry->get('Activator->Log');
 
 	$self->{DEFAULT_LEVEL} =
 	  $level ||
 	    $config->{default_level} ||
 	      'WARN';
 
-	$l4p_config = Activator::Registry->get('log4perl.conf') ||
-	  Activator::Registry->get('log4perl') ||
-	      $config->{'log4perl.conf'} ||
-		$config->{'log4perl'} ||
-		  { 'log4perl.logger.Activator.Log' => $self->{DEFAULT_LEVEL}.', Screen',
-		    'log4perl.appender.Screen' => 'Log::Log4perl::Appender::Screen',
-		    'log4perl.appender.Screen.layout' => 'Log::Log4perl::Layout::PatternLayout',
-		    'log4perl.appender.Screen.layout.ConversionPattern' => '%d{yyyy-MM-dd HH:mm:ss.SSS} [%p] %m (%M %L)%n',
-		  };
+	$l4p_config = $ENV{ACT_LOG_log4perl} ||
+	  Activator::Registry->get('log4perl.conf') ||
+	      Activator::Registry->get('log4perl') ||
+		  $config->{'log4perl.conf'} ||
+		    $config->{'log4perl'} ||
+		      { 'log4perl.logger.Activator.Log' => 'ALL, DEFAULT',
+			'log4perl.appender.DEFAULT' => 'Log::Log4perl::Appender::Screen',
+			'log4perl.appender.DEFAULT.layout' => 'Log::Log4perl::Layout::PatternLayout',
+			'log4perl.appender.DEFAULT.layout.ConversionPattern' => '%d{yyyy-MM-dd HH:mm:ss.SSS} [%p] %m (%M %L)%n',
+		      };
+
 	Log::Log4perl->init_once( $l4p_config );
+	if ( !Log::Log4perl->initialized() ) {
+	    warn( "ERROR: Activator::Log couldn't initialize logger with config $l4p_config");
+	}
+
 	$Log::Log4perl::caller_depth++;
 
 	# look for a specific logger to use
-	if ( exists $config->{logger} ) {
-	    $self->{LOGGER} = Log::Log4perl->get_logger( $config->{logger} );
+	if ( exists $config->{default_logger} ) {
+	    # TODO: detect invalid logger config
+	    $self->{DEFAULT_LOGGER} = Log::Log4perl->get_logger( $config->{default_logger} );
 	}
 	else {
-	    # just get the default Screen logger defined in log4perl.conf
-	    $self->{LOGGER} = Log::Log4perl->get_logger();
+	    if ( ! ( $self->{DEFAULT_LOGGER} = Log::Log4perl->get_logger( 'Activator.Log' ) ) ) {
+		# they defined a Log4perl config, but no default_logger.
+		die q(ERROR: Activator::Log:  If you define 'log4perl' in your registry, you must define 'default_logger' too.);
+	    }
 	}
     }
 
     return $self;
 }
 
-sub level {
+# backwards compatibility to <1.0
+sub level  {
+    &default_level( @_ );
+}
+
+sub default_level {
     my ( $pkg, $level ) = @_;
     my $self = &new( 'Activator::Log' );
-    if ( !$pkg ) {
-	Activator::Exception::Log->throw( 'level', 'required_argument');
-    }
-    if ( !$pkg->isa( 'Activator::Log' ) ) {
-	$level = $pkg;
-    }
-    $self->{LOGGER}->level( $level );
+    $level = &_get_static_arg( $pkg, $level );
+    $self->{DEFAULT_LOGGER}->level( $level );
+}
+
+sub default_logger {
+    my ( $pkg, $logger ) = @_;
+    my $self = &new( 'Activator::Log' );
+    $logger = &_get_static_arg( $pkg, $logger );
+    $self->{DEFAULT_LOGGER} = Log::Log4perl->get_logger( $logger )
 }
 
 sub FATAL {
-    my ( $pkg, $msg ) = @_;
+    my ( $pkg, $msg, $logger_label ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->fatal( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    my $logger = $self->{DEFAULT_LOGGER};
+    if ( $logger_label ) {
+	$logger = Log::Log4perl->get_logger( $logger_label );
+    }
+    $logger->fatal( $msg );
 }
 
 sub ERROR {
-    my ( $pkg, $msg ) = @_;
+    my ( $pkg, $msg, $logger_label ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->error( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    my $logger = $self->{DEFAULT_LOGGER};
+    if ( $logger_label ) {
+	$logger = Log::Log4perl->get_logger( $logger_label );
+    }
+    $logger->error( $msg );
 }
-
+ 
 sub WARN {
-    my ( $pkg, $msg ) = @_;
+    my ( $pkg, $msg, $logger_label ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->warn( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    my $logger = $self->{DEFAULT_LOGGER};
+    if ( $logger_label ) {
+	$logger = Log::Log4perl->get_logger( $logger_label );
+    }
+    $logger->warn( $msg );
 }
 
 sub INFO {
-    my ( $pkg, $msg ) = @_;
+    my ( $pkg, $msg, $logger_label ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->info( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    my $logger = $self->{DEFAULT_LOGGER};
+    if ( $logger_label ) {
+	$logger = Log::Log4perl->get_logger( $logger_label );
+    }
+    $logger->info( $msg );
 }
 
 sub DEBUG {
-    my ( $pkg, $msg ) = @_;
+    my ( $pkg, $msg, $logger_label ) = @_;
     my $caller = caller;
     my $self = &new( 'Activator::Log' );
     my $debug = &_enabled( 'DEBUG', $caller );
     if ( $debug ) {
-	$msg = _get_msg( $pkg, $msg );
-	$self->{LOGGER}->debug( $msg );
-    }
-
+       $msg = _get_static_arg( $pkg, $msg );
+       my $logger = $self->{DEFAULT_LOGGER};
+       if ( $logger_label ) {
+	   $logger = Log::Log4perl->get_logger( $logger_label );
+       }
+       $logger->debug( $msg );
+   }
 }
 
 sub TRACE {
-    my ( $pkg, $msg ) = @_;
+    my ( $pkg, $msg, $logger_label ) = @_;
     my $caller = caller;
     my $self = &new( 'Activator::Log' );
     my $trace = &_enabled( 'TRACE', $caller );
     if ( $trace ) {
-	$msg = _get_msg( $pkg, $msg );
-	$self->{LOGGER}->trace( $msg );
-    }
+       $msg = _get_static_arg( $pkg, $msg );
+       my $logger = $self->{DEFAULT_LOGGER};
+       if ( $logger_label ) {
+	   $logger = Log::Log4perl->get_logger( $logger_label );
+       }
+       $logger->trace( $msg );
+   }
 }
+
 
 sub is_fatal {
     my $self = &new( 'Activator::Log' );
-    return $self->{LOGGER}->is_fatal();
+    return $self->{DEFAULT_LOGGER}->is_fatal();
 }
 
 sub is_error {
     my $self = &new( 'Activator::Log' );
-    return $self->{LOGGER}->is_error();
+    return $self->{DEFAULT_LOGGER}->is_error();
 }
 
 sub is_warn {
     my $self = &new( 'Activator::Log' );
-    return $self->{LOGGER}->is_warn();
+    return $self->{DEFAULT_LOGGER}->is_warn();
 }
 
 sub is_info {
     my $self = &new( 'Activator::Log' );
-    return $self->{LOGGER}->is_info();
+    return $self->{DEFAULT_LOGGER}->is_info();
 }
 
 sub is_debug {
     my $self = &new( 'Activator::Log' );
-    return $self->{LOGGER}->is_debug();
+    return $self->{DEFAULT_LOGGER}->is_debug();
 }
 
 sub is_trace {
     my $self = &new( 'Activator::Log' );
-    return $self->{LOGGER}->is_trace();
+    return $self->{DEFAULT_LOGGER}->is_trace();
 }
 
 sub logwarn {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->logwarn( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    $self->{DEFAULT_LOGGER}->logwarn( $msg );
 }
 
 sub logdie {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->logdie( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    $self->{DEFAULT_LOGGER}->logdie( $msg );
 }
 
 sub error_warn {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->error_warn( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    $self->{DEFAULT_LOGGER}->error_warn( $msg );
 }
 
 sub error_die {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->error_die( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    $self->{DEFAULT_LOGGER}->error_die( $msg );
 }
 
 sub logcarp {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );B
-    $self->{LOGGER}->logcarp( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );B
+    $self->{DEFAULT_LOGGER}->logcarp( $msg );
 }
 
 sub logcluck {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->logcluck( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    $self->{DEFAULT_LOGGER}->logcluck( $msg );
 }
 
 sub logcroak {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->logcroak( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    $self->{DEFAULT_LOGGER}->logcroak( $msg );
 }
 
 sub logconfess {
     my ( $pkg, $msg ) = @_;
     my $self = &new( 'Activator::Log' );
-    $msg = _get_msg( $pkg, $msg );
-    $self->{LOGGER}->logconfess( $msg );
+    $msg = &_get_static_arg( $pkg, $msg );
+    $self->{DEFAULT_LOGGER}->logconfess( $msg );
 }
 
 
@@ -413,7 +484,10 @@ sub _enabled {
 
     return 1 if !$pkg;
 
-    my $log_config = Activator::Registry->get('Activator::Log');
+    my $log_config = 
+      Activator::Registry->get('Activator::Log') || 
+	  Activator::Registry->get('Activator->Log');
+
     my $config = $log_config->{$level};
 
     my $pkg_setting = -1;
@@ -434,21 +508,21 @@ sub _enabled {
 }
 
 # helper to handle static and OO calls
-sub _get_msg {
-    my ( $pkg, $msg ) = @_;
+sub _get_static_arg {
+    my ( $pkg, $arg ) = @_;
 
-    if ( !$pkg && !$msg ) {
-	$msg = '<empty message>';
+    if ( !$pkg && !$arg ) {
+	$arg = '<empty>';
     }
-    elsif ( !$msg ) {
+    elsif ( !$arg ) {
 	if ( UNIVERSAL::isa( $pkg, 'Activator::Log' ) ) {
-	    $msg = '<empty message>';
+	    $arg = '<empty>';
 	}
 	else {
-	    $msg = $pkg;
+	    $arg = $pkg;
 	}
     }
-    chomp $msg;
-    return $msg;
+    chomp $arg;
+    return $arg;
 }
 

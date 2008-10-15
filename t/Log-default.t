@@ -62,7 +62,7 @@ $capture->stop();
 
 foreach my $msg ( qw/ TRACE DEBUG INFO WARN ERROR FATAL / ) {
     $line = $capture->read;
-    ok ( $line =~ /\[$msg\] <empty message> \(main::/, "$msg works with null message" );
+    ok ( $line =~ /\[$msg\] <empty> \(main::/, "$msg works with null message" );
 }
 
 1;
